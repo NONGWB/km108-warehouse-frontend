@@ -501,7 +501,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 fullWidth
                 label="ราคาขาย"
                 type="number"
-                value={formData.SalePrice}
+                value={formData.SalePrice || ''}
                 onChange={(e) => handleInputChange('SalePrice', e.target.value)}
                 inputProps={{ min: 0, step: 0.01 }}
                 size="small"
@@ -527,7 +527,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 fullWidth
                 label="ราคา"
                 type="number"
-                value={formData.Store1Price}
+                value={formData.Store1Price || ''}
                 onChange={(e) => handleInputChange('Store1Price', e.target.value)}
                 inputProps={{ min: 0, step: 0.01 }}
                 size="small"
@@ -553,7 +553,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 fullWidth
                 label="ราคา"
                 type="number"
-                value={formData.Store2Price}
+                value={formData.Store2Price || ''}
                 onChange={(e) => handleInputChange('Store2Price', e.target.value)}
                 inputProps={{ min: 0, step: 0.01 }}
                 size="small"
@@ -579,7 +579,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 fullWidth
                 label="ราคา"
                 type="number"
-                value={formData.Store3Price}
+                value={formData.Store3Price || ''}
                 onChange={(e) => handleInputChange('Store3Price', e.target.value)}
                 inputProps={{ min: 0, step: 0.01 }}
                 size="small"
@@ -605,7 +605,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 fullWidth
                 label="ราคา"
                 type="number"
-                value={formData.Store4Price}
+                value={formData.Store4Price || ''}
                 onChange={(e) => handleInputChange('Store4Price', e.target.value)}
                 inputProps={{ min: 0, step: 0.01 }}
                 size="small"
