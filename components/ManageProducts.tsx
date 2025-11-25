@@ -26,6 +26,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import DownloadIcon from '@mui/icons-material/Download';
 import { Product } from '@/types/product';
 
 interface ManageProductsProps {
@@ -297,6 +298,42 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
     setUploadResult(null);
   };
 
+  const handleExportCSV = () => {
+    // Convert products to CSV format
+    const headers = ['ProductName', 'SalePrice', 'Store1Name', 'Store1Price', 'Store2Name', 'Store2Price', 'Store3Name', 'Store3Price', 'Store4Name', 'Store4Price'];
+    const csvContent = [
+      headers.join(','),
+      ...products.map(product => [
+        product.ProductName,
+        product.SalePrice || 0,
+        product.Store1Name || '',
+        product.Store1Price || 0,
+        product.Store2Name || '',
+        product.Store2Price || 0,
+        product.Store3Name || '',
+        product.Store3Price || 0,
+        product.Store4Name || '',
+        product.Store4Price || 0,
+      ].join(','))
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `products_${timestamp}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showSnackbar('ส่งออกข้อมูลสำเร็จ', 'success');
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -311,7 +348,16 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
         <Typography variant="h5" component="h2">
           จัดการข้อมูลสินค้า
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadIcon />}
+            onClick={handleExportCSV}
+            size="large"
+            color="success"
+          >
+            ส่งออก CSV
+          </Button>
           <Button
             variant="outlined"
             startIcon={<UploadFileIcon />}
