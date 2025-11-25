@@ -21,7 +21,6 @@ import {
   Snackbar,
   CircularProgress,
   Typography,
-  Grid,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -485,34 +484,28 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
           {editingProduct ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่'}
         </DialogTitle>
         <DialogContent sx={{ pt: 1, overflowY: 'auto', flex: 1 }}>
-          <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mt: 0.5 }}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="ชื่อสินค้า"
-                value={formData.ProductName}
-                onChange={(e) => handleInputChange('ProductName', e.target.value)}
-                required
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="ราคาขาย"
-                type="number"
-                value={formData.SalePrice || ''}
-                onChange={(e) => handleInputChange('SalePrice', e.target.value)}
-                inputProps={{ min: 0, step: 0.01 }}
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 1 }}>
-                ร้านที่ 1
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 }, mt: 0.5 }}>
+            <TextField
+              fullWidth
+              label="ชื่อสินค้า"
+              value={formData.ProductName}
+              onChange={(e) => handleInputChange('ProductName', e.target.value)}
+              required
+              size="small"
+            />
+            <TextField
+              fullWidth
+              label="ราคาขาย"
+              type="number"
+              value={formData.SalePrice || ''}
+              onChange={(e) => handleInputChange('SalePrice', e.target.value)}
+              inputProps={{ min: 0, step: 0.01 }}
+              size="small"
+            />
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 1 }}>
+              ร้านที่ 1
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 1.5, sm: 2 } }}>
               <TextField
                 fullWidth
                 label="ชื่อร้าน"
@@ -521,8 +514,6 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 placeholder="เช่น ร้านสยาม"
                 size="small"
               />
-            </Grid>
-            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="ราคา"
@@ -532,13 +523,11 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 inputProps={{ min: 0, step: 0.01 }}
                 size="small"
               />
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 0.5 }}>
-                ร้านที่ 2
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
+            </Box>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 0.5 }}>
+              ร้านที่ 2
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 1.5, sm: 2 } }}>
               <TextField
                 fullWidth
                 label="ชื่อร้าน"
@@ -547,8 +536,6 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 placeholder="เช่น ร้านเอกชัย"
                 size="small"
               />
-            </Grid>
-            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="ราคา"
@@ -558,13 +545,11 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 inputProps={{ min: 0, step: 0.01 }}
                 size="small"
               />
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 0.5 }}>
-                ร้านที่ 3
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
+            </Box>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 0.5 }}>
+              ร้านที่ 3
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 1.5, sm: 2 } }}>
               <TextField
                 fullWidth
                 label="ชื่อร้าน"
@@ -573,8 +558,6 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 placeholder="เช่น ร้านไทยไทย"
                 size="small"
               />
-            </Grid>
-            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="ราคา"
@@ -584,13 +567,11 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 inputProps={{ min: 0, step: 0.01 }}
                 size="small"
               />
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 0.5 }}>
-                ร้านที่ 4
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
+            </Box>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 0.5 }}>
+              ร้านที่ 4
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 1.5, sm: 2 } }}>
               <TextField
                 fullWidth
                 label="ชื่อร้าน"
@@ -599,8 +580,6 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 placeholder="เช่น ร้านอรุณ"
                 size="small"
               />
-            </Grid>
-            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="ราคา"
@@ -610,8 +589,8 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 inputProps={{ min: 0, step: 0.01 }}
                 size="small"
               />
-            </Grid>
-          </Grid>
+            </Box>
+          </Box>
         </DialogContent>
         <DialogActions sx={{ 
           px: { xs: 2, sm: 3 }, 

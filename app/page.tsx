@@ -261,36 +261,35 @@ export default function Home() {
                       เปรียบเทียบราคา:
                     </Typography>
 
-                    <Grid container spacing={0.5}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0.5 }}>
                       {[
                         { name: product.Store1Name, price: product.Store1Price },
                         { name: product.Store2Name, price: product.Store2Price },
                         { name: product.Store3Name, price: product.Store3Price },
                         { name: product.Store4Name, price: product.Store4Price },
                       ].filter(store => store.name && store.price > 0).map((store, idx) => (
-                        <Grid item xs={6} key={idx}>
-                          <Box
-                            sx={{
-                              p: 0.75,
-                              border: '1px solid',
-                              borderColor: 'divider',
-                              borderRadius: 1,
-                              bgcolor: store.price === getBestPrice(product) ? 'success.light' : 'background.paper',
-                            }}
-                          >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3, mb: 0.3 }}>
-                              <StoreIcon sx={{ fontSize: 12, color: 'primary.main' }} />
-                              <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: '0.7rem' }}>
-                                {store.name}
-                              </Typography>
-                            </Box>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
-                              ฿{store.price.toFixed(2)}
+                        <Box
+                          key={idx}
+                          sx={{
+                            p: 0.75,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            bgcolor: store.price === getBestPrice(product) ? 'success.light' : 'background.paper',
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3, mb: 0.3 }}>
+                            <StoreIcon sx={{ fontSize: 12, color: 'primary.main' }} />
+                            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: '0.7rem' }}>
+                              {store.name}
                             </Typography>
                           </Box>
-                        </Grid>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                            ฿{store.price.toFixed(2)}
+                          </Typography>
+                        </Box>
                       ))}
-                    </Grid>
+                    </Box>
 
                     <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Chip 
