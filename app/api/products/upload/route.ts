@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+// @ts-ignore - Using custom type declaration
 import Papa from 'papaparse';
 import { Product } from '@/types/product';
 import * as csv from '@/lib/csv';
