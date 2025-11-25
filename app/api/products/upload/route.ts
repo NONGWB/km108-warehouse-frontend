@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as Papa from 'papaparse';
+import Papa from 'papaparse';
 import { Product } from '@/types/product';
 import * as csv from '@/lib/csv';
 
