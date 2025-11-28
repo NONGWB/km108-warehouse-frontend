@@ -80,6 +80,13 @@ export default function Home() {
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
   const itemsPerPage = 10;
 
+  // Helper function to safely format price
+  const formatPrice = (price: any): string => {
+    if (price === null || price === undefined || price === '') return '-';
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    return isNaN(numPrice) ? '-' : numPrice.toFixed(2);
+  };
+
   const fetchProducts = async () => {
     try {
       setLoading(true);
@@ -151,7 +158,8 @@ export default function Home() {
       product.Store2Price,
       product.Store3Price,
       product.Store4Price,
-    ].filter(price => price > 0);
+    ].map(price => typeof price === 'string' ? parseFloat(price) : price)
+     .filter(price => !isNaN(price) && price > 0);
     return prices.length > 0 ? Math.min(...prices) : 0;
   };
 
@@ -251,7 +259,7 @@ export default function Home() {
                         ราคาขาย
                       </Typography>
                       <Typography variant="h6" color="secondary" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
-                        ฿{product.SalePrice?.toFixed(2) || '-'}
+                        ฿{formatPrice(product.SalePrice)}
                       </Typography>
                     </Box>
 
@@ -285,7 +293,7 @@ export default function Home() {
                             </Typography>
                           </Box>
                           <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
-                            ฿{store.price.toFixed(2)}
+                            ฿{formatPrice(store.price)}
                           </Typography>
                         </Box>
                       ))}
@@ -300,7 +308,7 @@ export default function Home() {
                         sx={{ fontSize: '0.7rem', height: 24 }}
                       />
                       <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
-                        ฿{getBestPrice(product).toFixed(2)}
+                        ฿{formatPrice(getBestPrice(product))}
                       </Typography>
                     </Box>
                   </CardContent>
@@ -350,7 +358,7 @@ export default function Home() {
                         {product.ProductName}
                       </TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold', color: 'secondary.main' }}>
-                        ฿{product.SalePrice?.toFixed(2) || '-'}
+                        ฿{formatPrice(product.SalePrice)}
                       </TableCell>
                       <TableCell>
                         <Box>
@@ -358,7 +366,7 @@ export default function Home() {
                             {product.Store1Name || '-'}
                           </Typography>
                           <Typography variant="body2">
-                            ฿{product.Store1Price?.toFixed(2) || '-'}
+                            ฿{formatPrice(product.Store1Price)}
                           </Typography>
                         </Box>
                       </TableCell>
@@ -368,7 +376,7 @@ export default function Home() {
                             {product.Store2Name || '-'}
                           </Typography>
                           <Typography variant="body2">
-                            ฿{product.Store2Price?.toFixed(2) || '-'}
+                            ฿{formatPrice(product.Store2Price)}
                           </Typography>
                         </Box>
                       </TableCell>
@@ -378,7 +386,7 @@ export default function Home() {
                             {product.Store3Name || '-'}
                           </Typography>
                           <Typography variant="body2">
-                            ฿{product.Store3Price?.toFixed(2) || '-'}
+                            ฿{formatPrice(product.Store3Price)}
                           </Typography>
                         </Box>
                       </TableCell>
@@ -388,12 +396,12 @@ export default function Home() {
                             {product.Store4Name || '-'}
                           </Typography>
                           <Typography variant="body2">
-                            ฿{product.Store4Price?.toFixed(2) || '-'}
+                            ฿{formatPrice(product.Store4Price)}
                           </Typography>
                         </Box>
                       </TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold', color: 'success.main' }}>
-                        ฿{getBestPrice(product).toFixed(2)}
+                        ฿{formatPrice(getBestPrice(product))}
                       </TableCell>
                       <TableCell align="center">
                         {getStoreWithBestPrice(product)}
