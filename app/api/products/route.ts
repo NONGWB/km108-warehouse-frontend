@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readProducts, addProduct, updateProduct, deleteProduct } from '@/lib/csv';
+import { readProducts, addProduct, updateProduct, deleteProduct } from '@/lib/googlesheets';
 
 export async function GET() {
   try {

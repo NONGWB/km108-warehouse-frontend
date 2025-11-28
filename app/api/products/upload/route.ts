@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // @ts-ignore - Using custom type declaration
 import Papa from 'papaparse';
 import { Product } from '@/types/product';
-import * as csv from '@/lib/csv';
+import * as sheets from '@/lib/googlesheets';
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get existing products
-    const existingProducts = await csv.readProducts();
+    const existingProducts = await sheets.readProducts();
     const existingNames = new Set(existingProducts.map(p => p.ProductName));
 
     // Separate new and duplicate products
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     // Add new products to existing data
     if (newProducts.length > 0) {
       const updatedProducts = [...existingProducts, ...newProducts];
-      await csv.writeProducts(updatedProducts);
+      await sheets.writeProducts(updatedProducts);
     }
 
     return NextResponse.json({
