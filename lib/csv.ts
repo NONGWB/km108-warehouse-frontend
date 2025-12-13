@@ -21,8 +21,16 @@ export async function readProducts(): Promise<Product[]> {
 }
 
 export async function writeProducts(products: Product[]): Promise<void> {
-  const csv = Papa.unparse(products);
-  await fs.writeFile(csvFilePath, csv, 'utf-8');
+  try {
+    const csv = Papa.unparse(products);
+    await fs.writeFile(csvFilePath, csv, 'utf-8');
+  } catch (error) {
+    // Vercel has read-only filesystem - throw specific error
+    if (error instanceof Error && error.message.includes('EROFS')) {
+      throw new Error('Cannot write to filesystem in serverless environment. Data is read-only on Vercel. Please use CSV export/import for data management.');
+    }
+    throw error;
+  }
 }
 
 export async function addProduct(product: Product): Promise<Product> {

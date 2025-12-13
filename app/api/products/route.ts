@@ -16,7 +16,9 @@ export async function POST(request: NextRequest) {
     const product = await addProduct(body);
     return NextResponse.json(product, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to add product' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to add product';
+    const status = message.includes('read-only') ? 503 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
@@ -32,7 +34,9 @@ export async function PUT(request: NextRequest) {
     
     return NextResponse.json(updated);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to update product' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to update product';
+    const status = message.includes('read-only') ? 503 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
@@ -53,6 +57,8 @@ export async function DELETE(request: NextRequest) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to delete product';
+    const status = message.includes('read-only') ? 503 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -219,7 +219,10 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
           body: JSON.stringify(formData),
         });
 
-        if (!response.ok) throw new Error('Failed to add product');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to add product');
+        }
         showSnackbar('เพิ่มสินค้าสำเร็จ', 'success');
       }
 
@@ -227,7 +230,8 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
       await fetchProducts();
       onProductsChange();
     } catch (error) {
-      showSnackbar('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', 'error');
+      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+      showSnackbar(message, 'error');
     }
   };
 
@@ -239,12 +243,16 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
         method: 'DELETE',
       });
 
-      if (!response.ok) throw new Error('Failed to delete product');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete product');
+      }
       showSnackbar('ลบสินค้าสำเร็จ', 'success');
       await fetchProducts();
       onProductsChange();
     } catch (error) {
-      showSnackbar('ไม่สามารถลบสินค้าได้', 'error');
+      const message = error instanceof Error ? error.message : 'ไม่สามารถลบสินค้าได้';
+      showSnackbar(message, 'error');
     }
   };
 
@@ -281,7 +289,8 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
       await fetchProducts();
       onProductsChange();
     } catch (error) {
-      showSnackbar('ไม่สามารถอัปโหลดไฟล์ได้', 'error');
+      const message = error instanceof Error ? error.message : 'ไม่สามารถอัปโหลดไฟล์ได้';
+      showSnackbar(message, 'error');
     } finally {
       setUploading(false);
       event.target.value = ''; // Reset file input
