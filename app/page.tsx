@@ -36,6 +36,9 @@ const theme = createTheme({
       paper: '#ffffff',
     },
   },
+  typography: {
+    fontFamily: "'Google Sans', 'Roboto', 'Helvetica', 'Arial', sans-serif",
+  },
 });
 
 export default function Home() {
