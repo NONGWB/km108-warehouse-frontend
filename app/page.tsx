@@ -1,37 +1,29 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, MouseEvent } from 'react';
 import {
   Container,
   Box,
   Typography,
-  TextField,
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   CircularProgress,
   Alert,
   ThemeProvider,
   createTheme,
   CssBaseline,
-  Tabs,
-  Tab,
-  Card,
-  CardContent,
-  Grid,
-  Chip,
-  Divider,
   useMediaQuery,
   useTheme,
+  Toolbar,
 } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import StoreIcon from '@mui/icons-material/Store';
 import { Product } from '@/types/product';
 import ManageProducts from '@/components/ManageProducts';
+import ManageOrderNotes from '@/components/ManageOrderNotes';
+import ManageContacts from '@/components/ManageContacts';
+import NavBar from '@/components/NavBar';
+import SearchBar from '@/components/SearchBar';
+import ProductCard from '@/components/ProductCard';
+import ProductTable from '@/components/ProductTable';
+import PriceComparisonFab from '@/components/PriceComparisonFab';
 
 const theme = createTheme({
   palette: {
@@ -41,30 +33,15 @@ const theme = createTheme({
     secondary: {
       main: '#dc004e',
     },
+    background: {
+      default: '#f8f9fa',
+      paper: '#ffffff',
+    },
+  },
+  typography: {
+    fontFamily: "'Google Sans', 'Roboto', 'Helvetica', 'Arial', sans-serif",
   },
 });
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      aria-labelledby={`tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  );
-}
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -76,15 +53,23 @@ export default function Home() {
   const [tabValue, setTabValue] = useState(0);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [showPriceComparison, setShowPriceComparison] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [mounted, setMounted] = useState(false);
   const muiTheme = useTheme();
-  const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'), { noSsr: true });
   const itemsPerPage = 10;
 
-  // Helper function to safely format price
+  // Wait for client mount to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Helper function to safely format price with number formatting
   const formatPrice = (price: any): string => {
     if (price === null || price === undefined || price === '') return '-';
     const numPrice = typeof price === 'string' ? parseFloat(price) : price;
-    return isNaN(numPrice) ? '-' : numPrice.toFixed(2);
+    return isNaN(numPrice) ? '-' : numPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const fetchProducts = async () => {
@@ -148,8 +133,17 @@ export default function Home() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [page, hasMore, loading, filteredProducts, tabValue]);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  const handleMenuOpen = (event: MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleMenuSelect = (index: number) => {
+    setTabValue(index);
+    handleMenuClose();
   };
 
   const getBestPrice = (product: Product) => {
@@ -180,258 +174,107 @@ export default function Home() {
     return best.store;
   };
 
+  // Avoid hydration mismatch by not rendering until mounted
+  if (!mounted) {
+    return null;
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <NavBar
+        tabValue={tabValue}
+        anchorEl={anchorEl}
+        onMenuOpen={handleMenuOpen}
+        onMenuClose={handleMenuClose}
+        onMenuSelect={handleMenuSelect}
+      />
+
+      {/* Toolbar spacer for fixed AppBar */}
+      <Toolbar />
+
       <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
-        <Box sx={{ mb: { xs: 2, md: 4 }, textAlign: 'center' }}>
-          <Typography 
-            variant="h3" 
-            component="h1" 
-            gutterBottom 
-            color="primary" 
-            sx={{ 
-              fontWeight: 'bold',
-              fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }
-            }}
-          >
-            KM 108 Shop
-          </Typography>
-          <Typography 
-            variant="h6" 
-            color="text.secondary"
-            sx={{ fontSize: { xs: '0.875rem', sm: '1rem', md: '1.25rem' } }}
-          >
-            ระบบค้นหาและเปรียบเทียบราคาสินค้า
-          </Typography>
-        </Box>
-
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-          <Tabs value={tabValue} onChange={handleTabChange} centered>
-            <Tab label="ค้นหาสินค้า" />
-            <Tab label="จัดการสินค้า" />
-          </Tabs>
-        </Box>
-
-        <TabPanel value={tabValue} index={0}>
-          <Box sx={{ mb: { xs: 2, md: 3 } }}>
-            <TextField
-              fullWidth
-              variant="outlined"
-              placeholder="ค้นหาสินค้า..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              size={isMobile ? 'small' : 'medium'}
-              InputProps={{
-                startAdornment: <SearchIcon sx={{ mr: 1, color: 'action.active' }} />,
-              }}
+        {tabValue === 0 && (
+          <Box>
+            <SearchBar
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              isMobile={isMobile}
             />
-          </Box>
 
-          {error && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-          )}
+            {error && (
+              <Alert severity="error" sx={{ mb: 3 }}>
+                {error}
+              </Alert>
+            )}
 
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-              <CircularProgress />
-            </Box>
-          ) : filteredProducts.length === 0 ? (
-            <Paper sx={{ p: 4, textAlign: 'center' }}>
-              <Typography color="text.secondary">
-                {searchTerm ? 'ไม่พบสินค้าที่ค้นหา' : 'ไม่มีข้อมูลสินค้า'}
-              </Typography>
-            </Paper>
-          ) : isMobile ? (
-            <>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {displayedProducts.map((product, index) => (
-                <Card key={index} elevation={2}>
-                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                    <Typography variant="subtitle1" gutterBottom color="primary" sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                      {product.ProductName}
-                    </Typography>
-                    
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        ราคาขาย
-                      </Typography>
-                      <Typography variant="h6" color="secondary" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
-                        ฿{formatPrice(product.SalePrice)}
-                      </Typography>
-                    </Box>
-
-                    <Divider sx={{ my: 1.5 }} />
-
-                    <Typography variant="caption" gutterBottom sx={{ fontWeight: 'bold', mb: 1, display: 'block' }}>
-                      เปรียบเทียบราคา:
-                    </Typography>
-
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0.5 }}>
-                      {[
-                        { name: product.Store1Name, price: product.Store1Price },
-                        { name: product.Store2Name, price: product.Store2Price },
-                        { name: product.Store3Name, price: product.Store3Price },
-                        { name: product.Store4Name, price: product.Store4Price },
-                      ].filter(store => store.name && store.price > 0).map((store, idx) => (
-                        <Box
-                          key={idx}
-                          sx={{
-                            p: 0.75,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                            borderRadius: 1,
-                            bgcolor: store.price === getBestPrice(product) ? 'success.light' : 'background.paper',
-                          }}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3, mb: 0.3 }}>
-                            <StoreIcon sx={{ fontSize: 12, color: 'primary.main' }} />
-                            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: '0.7rem' }}>
-                              {store.name}
-                            </Typography>
-                          </Box>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
-                            ฿{formatPrice(store.price)}
-                          </Typography>
-                        </Box>
-                      ))}
-                    </Box>
-
-                    <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Chip 
-                        label={`ถูกที่สุด: ${getStoreWithBestPrice(product)}`}
-                        color="success"
-                        size="small"
-                        icon={<StoreIcon />}
-                        sx={{ fontSize: '0.7rem', height: 24 }}
-                      />
-                      <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
-                        ฿{formatPrice(getBestPrice(product))}
-                      </Typography>
-                    </Box>
-                  </CardContent>
-                </Card>
-              ))}
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+                <CircularProgress />
               </Box>
-            </>
-          ) : (
-            <TableContainer component={Paper} elevation={3}>
-              <Table sx={{ minWidth: 650 }}>
-                <TableHead>
-                  <TableRow sx={{ bgcolor: 'primary.main' }}>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>ชื่อสินค้า</TableCell>
-                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold' }}>
-                      ราคาขาย
-                    </TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
-                      ร้านที่ 1
-                    </TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
-                      ร้านที่ 2
-                    </TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
-                      ร้านที่ 3
-                    </TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
-                      ร้านที่ 4
-                    </TableCell>
-                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold' }}>
-                      ราคาต่ำสุด
-                    </TableCell>
-                    <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold' }}>
-                      ร้านที่ถูกที่สุด
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {displayedProducts.map((product, index) => (
-                    <TableRow
-                      key={index}
-                      sx={{
-                        '&:nth-of-type(odd)': { bgcolor: 'action.hover' },
-                        '&:hover': { bgcolor: 'action.selected' },
-                      }}
-                    >
-                      <TableCell component="th" scope="row">
-                        {product.ProductName}
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold', color: 'secondary.main' }}>
-                        ฿{formatPrice(product.SalePrice)}
-                      </TableCell>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                            {product.Store1Name || '-'}
-                          </Typography>
-                          <Typography variant="body2">
-                            ฿{formatPrice(product.Store1Price)}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                            {product.Store2Name || '-'}
-                          </Typography>
-                          <Typography variant="body2">
-                            ฿{formatPrice(product.Store2Price)}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                            {product.Store3Name || '-'}
-                          </Typography>
-                          <Typography variant="body2">
-                            ฿{formatPrice(product.Store3Price)}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                            {product.Store4Name || '-'}
-                          </Typography>
-                          <Typography variant="body2">
-                            ฿{formatPrice(product.Store4Price)}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold', color: 'success.main' }}>
-                        ฿{formatPrice(getBestPrice(product))}
-                      </TableCell>
-                      <TableCell align="center">
-                        {getStoreWithBestPrice(product)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
+            ) : filteredProducts.length === 0 ? (
+              <Paper sx={{ p: 4, textAlign: 'center' }}>
+                <Typography color="text.secondary">
+                  {searchTerm ? 'ไม่พบสินค้าที่ค้นหา' : 'ไม่มีข้อมูลสินค้า'}
+                </Typography>
+              </Paper>
+            ) : isMobile ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {displayedProducts.map((product, index) => (
+                  <ProductCard
+                    key={index}
+                    product={product}
+                    showPriceComparison={showPriceComparison}
+                    formatPrice={formatPrice}
+                    getBestPrice={getBestPrice}
+                  />
+                ))}
+              </Box>
+            ) : (
+              <ProductTable
+                products={displayedProducts}
+                formatPrice={formatPrice}
+                getBestPrice={getBestPrice}
+                getStoreWithBestPrice={getStoreWithBestPrice}
+              />
+            )}
 
-          {!loading && hasMore && displayedProducts.length > 0 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-              <CircularProgress size={30} />
-            </Box>
-          )}
+            {!loading && hasMore && displayedProducts.length > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                <CircularProgress size={30} />
+              </Box>
+            )}
 
-          {!loading && !hasMore && displayedProducts.length > 0 && (
-            <Box sx={{ textAlign: 'center', py: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                แสดงครบทั้งหมดแล้ว ({filteredProducts.length} รายการ)
-              </Typography>
-            </Box>
-          )}
-        </TabPanel>
+            {!loading && !hasMore && displayedProducts.length > 0 && (
+              <Box sx={{ textAlign: 'center', py: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  แสดงครบทั้งหมดแล้ว ({filteredProducts.length} รายการ)
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        )}
 
-        <TabPanel value={tabValue} index={1}>
+        {tabValue === 1 && (
           <ManageProducts onProductsChange={fetchProducts} />
-        </TabPanel>
+        )}
+
+        {tabValue === 2 && (
+          <ManageOrderNotes />
+        )}
+
+        {tabValue === 3 && (
+          <ManageContacts />
+        )}
       </Container>
+
+      {/* Floating Action Button for mobile price comparison toggle */}
+      {isMobile && tabValue === 0 && !loading && filteredProducts.length > 0 && (
+        <PriceComparisonFab
+          showPriceComparison={showPriceComparison}
+          onToggle={() => setShowPriceComparison(!showPriceComparison)}
+        />
+      )}
     </ThemeProvider>
   );
 }

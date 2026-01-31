@@ -1,5 +1,6 @@
 export interface Product {
   ProductName: string;
+  barcode?: string;
   SalePrice: number;
   Store1Name: string;
   Store1Price: number;
@@ -9,4 +10,6 @@ export interface Product {
   Store3Price: number;
   Store4Name: string;
   Store4Price: number;
+  created_at?: string;
+  updated_at?: string;
 }

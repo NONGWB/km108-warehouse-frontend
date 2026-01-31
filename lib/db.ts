@@ -4,6 +4,7 @@ import { Product } from '@/types/product';
 // Database row type (snake_case from Postgres)
 interface ProductRow {
   product_name: string;
+  barcode?: string;
   sale_price: number;
   store1_name: string;
   store1_price: number;
@@ -13,12 +14,15 @@ interface ProductRow {
   store3_price: number;
   store4_name: string;
   store4_price: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // Convert Product (PascalCase) to ProductRow (snake_case)
 function toRow(product: Product): ProductRow {
   return {
     product_name: product.ProductName,
+    barcode: product.barcode || '',
     sale_price: product.SalePrice || 0,
     store1_name: product.Store1Name || '',
     store1_price: product.Store1Price || 0,
@@ -28,6 +32,7 @@ function toRow(product: Product): ProductRow {
     store3_price: product.Store3Price || 0,
     store4_name: product.Store4Name || '',
     store4_price: product.Store4Price || 0,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -35,6 +40,7 @@ function toRow(product: Product): ProductRow {
 function toProduct(row: ProductRow): Product {
   return {
     ProductName: row.product_name,
+    barcode: row.barcode,
     SalePrice: row.sale_price,
     Store1Name: row.store1_name,
     Store1Price: row.store1_price,
@@ -44,6 +50,8 @@ function toProduct(row: ProductRow): Product {
     Store3Price: row.store3_price,
     Store4Name: row.store4_name,
     Store4Price: row.store4_price,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   };
 }
 
@@ -51,7 +59,7 @@ export async function readProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from('products')
     .select('*')
-    .order('product_name');
+    .order('updated_at', { ascending: false });
 
   if (error) {
     console.error('Error reading products:', error);
