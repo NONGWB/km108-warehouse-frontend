@@ -64,6 +64,13 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
   });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
+  // Helper function to safely format price with number formatting
+  const formatPrice = (price: any): string => {
+    if (price === null || price === undefined || price === '') return '-';
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    return isNaN(numPrice) ? '-' : numPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   const fetchProducts = async () => {
     try {
       setLoading(true);
@@ -377,14 +384,14 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
           >
             ส่งออก CSV
           </Button>
-          <Button
+          {/* <Button
             variant="outlined"
             startIcon={<UploadFileIcon />}
             onClick={handleOpenUploadDialog}
             size="large"
           >
             อัปโหลด CSV
-          </Button>
+          </Button> */}
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -455,14 +462,14 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                   <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                     {product.barcode || '-'}
                   </TableCell>
-                  <TableCell align="right">{product.SalePrice?.toFixed(2) || '-'}</TableCell>
+                  <TableCell align="right">{formatPrice(product.SalePrice)}</TableCell>
                   <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                     <Box>
                       <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
                         {product.Store1Name || '-'}
                       </Typography>
                       <Typography variant="body2">
-                        {product.Store1Price?.toFixed(2) || '-'}
+                        {formatPrice(product.Store1Price)}
                       </Typography>
                     </Box>
                   </TableCell>
@@ -472,7 +479,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                         {product.Store2Name || '-'}
                       </Typography>
                       <Typography variant="body2">
-                        {product.Store2Price?.toFixed(2) || '-'}
+                        {formatPrice(product.Store2Price)}
                       </Typography>
                     </Box>
                   </TableCell>
@@ -482,7 +489,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                         {product.Store3Name || '-'}
                       </Typography>
                       <Typography variant="body2">
-                        {product.Store3Price?.toFixed(2) || '-'}
+                        {formatPrice(product.Store3Price)}
                       </Typography>
                     </Box>
                   </TableCell>
@@ -492,7 +499,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                         {product.Store4Name || '-'}
                       </Typography>
                       <Typography variant="body2">
-                        {product.Store4Price?.toFixed(2) || '-'}
+                        {formatPrice(product.Store4Price)}
                       </Typography>
                     </Box>
                   </TableCell>

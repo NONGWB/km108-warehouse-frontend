@@ -18,8 +18,6 @@ import {
   ThemeProvider,
   createTheme,
   CssBaseline,
-  Tabs,
-  Tab,
   Card,
   CardContent,
   Grid,
@@ -27,12 +25,19 @@ import {
   Divider,
   useMediaQuery,
   useTheme,
-  FormControlLabel,
-  Radio,
-  RadioGroup,
+  AppBar,
+  Toolbar,
+  Menu,
+  MenuItem,
+  IconButton,
+  Button,
+  Fab,
+  Tooltip,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import StoreIcon from '@mui/icons-material/Store';
+import MenuIcon from '@mui/icons-material/Menu';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { Product } from '@/types/product';
 import ManageProducts from '@/components/ManageProducts';
 
@@ -44,30 +49,12 @@ const theme = createTheme({
     secondary: {
       main: '#dc004e',
     },
+    background: {
+      default: '#f8f9fa',
+      paper: '#ffffff',
+    },
   },
 });
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      aria-labelledby={`tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  );
-}
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -80,15 +67,22 @@ export default function Home() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [showPriceComparison, setShowPriceComparison] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [mounted, setMounted] = useState(false);
   const muiTheme = useTheme();
-  const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'), { noSsr: true });
   const itemsPerPage = 10;
 
-  // Helper function to safely format price
+  // Wait for client mount to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Helper function to safely format price with number formatting
   const formatPrice = (price: any): string => {
     if (price === null || price === undefined || price === '') return '-';
     const numPrice = typeof price === 'string' ? parseFloat(price) : price;
-    return isNaN(numPrice) ? '-' : numPrice.toFixed(2);
+    return isNaN(numPrice) ? '-' : numPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const fetchProducts = async () => {
@@ -152,8 +146,17 @@ export default function Home() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [page, hasMore, loading, filteredProducts, tabValue]);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleMenuSelect = (index: number) => {
+    setTabValue(index);
+    handleMenuClose();
   };
 
   const getBestPrice = (product: Product) => {
@@ -184,40 +187,97 @@ export default function Home() {
     return best.store;
   };
 
+  // Avoid hydration mismatch by not rendering until mounted
+  if (!mounted) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+          <CircularProgress />
+        </Box>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
-        <Box sx={{ mb: { xs: 2, md: 4 }, textAlign: 'center' }}>
+      <AppBar position="static" sx={{ mb: 2 }}>
+        <Toolbar>
           <Typography 
-            variant="h3" 
-            component="h1" 
-            gutterBottom 
-            color="primary" 
-            sx={{ 
-              fontWeight: 'bold',
-              fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }
-            }}
+            variant="h6" 
+            component="div" 
+            sx={{ flexGrow: 1, fontWeight: 'bold' }}
           >
             KM 108 Shop
           </Typography>
-          <Typography 
-            variant="h6" 
-            color="text.secondary"
-            sx={{ fontSize: { xs: '0.875rem', sm: '1rem', md: '1.25rem' } }}
-          >
-            ระบบค้นหาและเปรียบเทียบราคาสินค้า
-          </Typography>
-        </Box>
+          
+          {/* Desktop Menu */}
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1 }}>
+            <Button 
+              color="inherit" 
+              onClick={() => setTabValue(0)}
+              sx={{ 
+                bgcolor: tabValue === 0 ? 'rgba(255,255,255,0.15)' : 'transparent',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' }
+              }}
+            >
+              ค้นหาสินค้า
+            </Button>
+            <Button 
+              color="inherit" 
+              onClick={() => setTabValue(1)}
+              sx={{ 
+                bgcolor: tabValue === 1 ? 'rgba(255,255,255,0.15)' : 'transparent',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' }
+              }}
+            >
+              จัดการสินค้า
+            </Button>
+          </Box>
 
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-          <Tabs value={tabValue} onChange={handleTabChange} centered>
-            <Tab label="ค้นหาสินค้า" />
-            <Tab label="จัดการสินค้า" />
-          </Tabs>
-        </Box>
+          {/* Mobile Menu */}
+          <Box sx={{ display: { xs: 'flex', md: 'none' } }}>
+            <IconButton
+              size="large"
+              color="inherit"
+              onClick={handleMenuOpen}
+            >
+              <MenuIcon />
+            </IconButton>
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={handleMenuClose}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'right',
+              }}
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+            >
+              <MenuItem 
+                onClick={() => handleMenuSelect(0)}
+                selected={tabValue === 0}
+              >
+                ค้นหาสินค้า
+              </MenuItem>
+              <MenuItem 
+                onClick={() => handleMenuSelect(1)}
+                selected={tabValue === 1}
+              >
+                จัดการสินค้า
+              </MenuItem>
+            </Menu>
+          </Box>
+        </Toolbar>
+      </AppBar>
 
-        <TabPanel value={tabValue} index={0}>
+      <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
+        {tabValue === 0 && (
+          <Box>
           <Box sx={{ mb: { xs: 2, md: 3 } }}>
             <TextField
               fullWidth
@@ -237,30 +297,6 @@ export default function Home() {
               {error}
             </Alert>
           )}
-          
-          {isMobile && !loading && filteredProducts.length > 0 && (
-            <Box sx={{ mb: 2 }}>
-              <RadioGroup
-                row
-                value={showPriceComparison ? 'show' : 'hide'}
-                onChange={(e) => setShowPriceComparison(e.target.value === 'show')}
-                sx={{ justifyContent: 'center' }}
-              >
-                <FormControlLabel 
-                  value="show" 
-                  control={<Radio size="small" />} 
-                  label="แสดงเปรียบเทียบราคา" 
-                  sx={{ '& .MuiFormControlLabel-label': { fontSize: '0.875rem' } }}
-                />
-                <FormControlLabel 
-                  value="hide" 
-                  control={<Radio size="small" />} 
-                  label="ไม่แสดง" 
-                  sx={{ '& .MuiFormControlLabel-label': { fontSize: '0.875rem' } }}
-                />
-              </RadioGroup>
-            </Box>
-          )}
 
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -274,72 +310,38 @@ export default function Home() {
             </Paper>
           ) : isMobile ? (
             <>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {displayedProducts.map((product, index) => (
-                <Card key={index} elevation={2}>
-                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                    <Typography variant="subtitle1" gutterBottom color="primary" sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                      {product.ProductName}
-                    </Typography>
-                    
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        ราคาขาย
+                <Card key={index} elevation={1} sx={{ borderRadius: 1 }}>
+                  <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" color="primary" sx={{ fontWeight: 'bold', fontSize: '0.875rem', flex: 1, mr: 1 }}>
+                        {product.ProductName}
                       </Typography>
-                      <Typography variant="h6" color="secondary" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
-                        ฿{formatPrice(product.SalePrice)}
+                      <Typography variant="body2" color="secondary" sx={{ fontWeight: 'bold', fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
+                        {formatPrice(product.SalePrice)}
                       </Typography>
                     </Box>
 
                     {showPriceComparison && (
                       <>
-                        <Divider sx={{ my: 1.5 }} />
-
-                        <Typography variant="caption" gutterBottom sx={{ fontWeight: 'bold', mb: 1, display: 'block' }}>
-                          เปรียบเทียบราคา:
-                        </Typography>
-
-                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0.5 }}>
+                        <Divider sx={{ my: 0.75 }} />
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
                           {[
                             { name: product.Store1Name, price: product.Store1Price },
                             { name: product.Store2Name, price: product.Store2Price },
                             { name: product.Store3Name, price: product.Store3Price },
                             { name: product.Store4Name, price: product.Store4Price },
                           ].filter(store => store.name && store.price > 0).map((store, idx) => (
-                            <Box
+                            <Chip
                               key={idx}
-                              sx={{
-                                p: 0.75,
-                                border: '1px solid',
-                                borderColor: 'divider',
-                                borderRadius: 1,
-                                bgcolor: store.price === getBestPrice(product) ? 'success.light' : 'background.paper',
-                              }}
-                            >
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3, mb: 0.3 }}>
-                                <StoreIcon sx={{ fontSize: 12, color: 'primary.main' }} />
-                                <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: '0.7rem' }}>
-                                  {store.name}
-                                </Typography>
-                              </Box>
-                              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
-                                ฿{formatPrice(store.price)}
-                              </Typography>
-                            </Box>
+                              label={`${store.name}: ${formatPrice(store.price)}${store.price === getBestPrice(product) ? ' ✓ถูกสุด' : ''}`}
+                              size="small"
+                              color={store.price === getBestPrice(product) ? 'success' : 'default'}
+                              variant={store.price === getBestPrice(product) ? 'filled' : 'outlined'}
+                              sx={{ fontSize: '0.65rem', height: 20 }}
+                            />
                           ))}
-                        </Box>
-
-                        <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Chip 
-                            label={`ถูกที่สุด: ${getStoreWithBestPrice(product)}`}
-                            color="success"
-                            size="small"
-                            icon={<StoreIcon />}
-                            sx={{ fontSize: '0.7rem', height: 24 }}
-                          />
-                          <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
-                            ฿{formatPrice(getBestPrice(product))}
-                          </Typography>
                         </Box>
                       </>
                     )}
@@ -390,7 +392,7 @@ export default function Home() {
                         {product.ProductName}
                       </TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold', color: 'secondary.main' }}>
-                        ฿{formatPrice(product.SalePrice)}
+                        {formatPrice(product.SalePrice)}
                       </TableCell>
                       <TableCell>
                         <Box>
@@ -398,7 +400,7 @@ export default function Home() {
                             {product.Store1Name || '-'}
                           </Typography>
                           <Typography variant="body2">
-                            ฿{formatPrice(product.Store1Price)}
+                            {formatPrice(product.Store1Price)}
                           </Typography>
                         </Box>
                       </TableCell>
@@ -408,7 +410,7 @@ export default function Home() {
                             {product.Store2Name || '-'}
                           </Typography>
                           <Typography variant="body2">
-                            ฿{formatPrice(product.Store2Price)}
+                            {formatPrice(product.Store2Price)}
                           </Typography>
                         </Box>
                       </TableCell>
@@ -418,7 +420,7 @@ export default function Home() {
                             {product.Store3Name || '-'}
                           </Typography>
                           <Typography variant="body2">
-                            ฿{formatPrice(product.Store3Price)}
+                            {formatPrice(product.Store3Price)}
                           </Typography>
                         </Box>
                       </TableCell>
@@ -428,12 +430,12 @@ export default function Home() {
                             {product.Store4Name || '-'}
                           </Typography>
                           <Typography variant="body2">
-                            ฿{formatPrice(product.Store4Price)}
+                            {formatPrice(product.Store4Price)}
                           </Typography>
                         </Box>
                       </TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold', color: 'success.main' }}>
-                        ฿{formatPrice(getBestPrice(product))}
+                        {formatPrice(getBestPrice(product))}
                       </TableCell>
                       <TableCell align="center">
                         {getStoreWithBestPrice(product)}
@@ -458,12 +460,32 @@ export default function Home() {
               </Typography>
             </Box>
           )}
-        </TabPanel>
+          </Box>
+        )}
 
-        <TabPanel value={tabValue} index={1}>
+        {tabValue === 1 && (
           <ManageProducts onProductsChange={fetchProducts} />
-        </TabPanel>
+        )}
       </Container>
+
+      {/* Floating Action Button for mobile price comparison toggle */}
+      {isMobile && tabValue === 0 && !loading && filteredProducts.length > 0 && (
+        <Tooltip title={showPriceComparison ? 'ซ่อนเปรียบเทียบราคา' : 'แสดงเปรียบเทียบราคา'} placement="left">
+          <Fab
+            color={showPriceComparison ? 'primary' : 'default'}
+            size="medium"
+            onClick={() => setShowPriceComparison(!showPriceComparison)}
+            sx={{
+              position: 'fixed',
+              bottom: 24,
+              right: 24,
+              zIndex: 1000,
+            }}
+          >
+            <CompareArrowsIcon />
+          </Fab>
+        </Tooltip>
+      )}
     </ThemeProvider>
   );
 }
