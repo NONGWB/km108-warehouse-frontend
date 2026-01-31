@@ -27,6 +27,9 @@ import {
   Divider,
   useMediaQuery,
   useTheme,
+  FormControlLabel,
+  Radio,
+  RadioGroup,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import StoreIcon from '@mui/icons-material/Store';
@@ -76,6 +79,7 @@ export default function Home() {
   const [tabValue, setTabValue] = useState(0);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [showPriceComparison, setShowPriceComparison] = useState(false);
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
   const itemsPerPage = 10;
@@ -233,6 +237,30 @@ export default function Home() {
               {error}
             </Alert>
           )}
+          
+          {isMobile && !loading && filteredProducts.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <RadioGroup
+                row
+                value={showPriceComparison ? 'show' : 'hide'}
+                onChange={(e) => setShowPriceComparison(e.target.value === 'show')}
+                sx={{ justifyContent: 'center' }}
+              >
+                <FormControlLabel 
+                  value="show" 
+                  control={<Radio size="small" />} 
+                  label="แสดงเปรียบเทียบราคา" 
+                  sx={{ '& .MuiFormControlLabel-label': { fontSize: '0.875rem' } }}
+                />
+                <FormControlLabel 
+                  value="hide" 
+                  control={<Radio size="small" />} 
+                  label="ไม่แสดง" 
+                  sx={{ '& .MuiFormControlLabel-label': { fontSize: '0.875rem' } }}
+                />
+              </RadioGroup>
+            </Box>
+          )}
 
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -263,54 +291,58 @@ export default function Home() {
                       </Typography>
                     </Box>
 
-                    <Divider sx={{ my: 1.5 }} />
+                    {showPriceComparison && (
+                      <>
+                        <Divider sx={{ my: 1.5 }} />
 
-                    <Typography variant="caption" gutterBottom sx={{ fontWeight: 'bold', mb: 1, display: 'block' }}>
-                      เปรียบเทียบราคา:
-                    </Typography>
+                        <Typography variant="caption" gutterBottom sx={{ fontWeight: 'bold', mb: 1, display: 'block' }}>
+                          เปรียบเทียบราคา:
+                        </Typography>
 
-                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0.5 }}>
-                      {[
-                        { name: product.Store1Name, price: product.Store1Price },
-                        { name: product.Store2Name, price: product.Store2Price },
-                        { name: product.Store3Name, price: product.Store3Price },
-                        { name: product.Store4Name, price: product.Store4Price },
-                      ].filter(store => store.name && store.price > 0).map((store, idx) => (
-                        <Box
-                          key={idx}
-                          sx={{
-                            p: 0.75,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                            borderRadius: 1,
-                            bgcolor: store.price === getBestPrice(product) ? 'success.light' : 'background.paper',
-                          }}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3, mb: 0.3 }}>
-                            <StoreIcon sx={{ fontSize: 12, color: 'primary.main' }} />
-                            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: '0.7rem' }}>
-                              {store.name}
-                            </Typography>
-                          </Box>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
-                            ฿{formatPrice(store.price)}
+                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0.5 }}>
+                          {[
+                            { name: product.Store1Name, price: product.Store1Price },
+                            { name: product.Store2Name, price: product.Store2Price },
+                            { name: product.Store3Name, price: product.Store3Price },
+                            { name: product.Store4Name, price: product.Store4Price },
+                          ].filter(store => store.name && store.price > 0).map((store, idx) => (
+                            <Box
+                              key={idx}
+                              sx={{
+                                p: 0.75,
+                                border: '1px solid',
+                                borderColor: 'divider',
+                                borderRadius: 1,
+                                bgcolor: store.price === getBestPrice(product) ? 'success.light' : 'background.paper',
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3, mb: 0.3 }}>
+                                <StoreIcon sx={{ fontSize: 12, color: 'primary.main' }} />
+                                <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: '0.7rem' }}>
+                                  {store.name}
+                                </Typography>
+                              </Box>
+                              <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                                ฿{formatPrice(store.price)}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Box>
+
+                        <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Chip 
+                            label={`ถูกที่สุด: ${getStoreWithBestPrice(product)}`}
+                            color="success"
+                            size="small"
+                            icon={<StoreIcon />}
+                            sx={{ fontSize: '0.7rem', height: 24 }}
+                          />
+                          <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
+                            ฿{formatPrice(getBestPrice(product))}
                           </Typography>
                         </Box>
-                      ))}
-                    </Box>
-
-                    <Box sx={{ mt: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Chip 
-                        label={`ถูกที่สุด: ${getStoreWithBestPrice(product)}`}
-                        color="success"
-                        size="small"
-                        icon={<StoreIcon />}
-                        sx={{ fontSize: '0.7rem', height: 24 }}
-                      />
-                      <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
-                        ฿{formatPrice(getBestPrice(product))}
-                      </Typography>
-                    </Box>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               ))}

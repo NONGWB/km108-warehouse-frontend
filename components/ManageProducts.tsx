@@ -21,6 +21,8 @@ import {
   Snackbar,
   CircularProgress,
   Typography,
+  Card,
+  CardContent,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -49,6 +51,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<Product>({
     ProductName: '',
+    barcode: '',
     SalePrice: 0,
     Store1Name: '',
     Store1Price: 0,
@@ -87,6 +90,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
       const query = searchQuery.toLowerCase();
       const filtered = products.filter(product => 
         product.ProductName.toLowerCase().includes(query) ||
+        product.barcode?.toLowerCase().includes(query) ||
         product.Store1Name?.toLowerCase().includes(query) ||
         product.Store2Name?.toLowerCase().includes(query) ||
         product.Store3Name?.toLowerCase().includes(query) ||
@@ -148,6 +152,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
       setEditingProduct(product);
       setFormData({
         ProductName: product.ProductName || '',
+        barcode: product.barcode || '',
         SalePrice: product.SalePrice || 0,
         Store1Name: product.Store1Name || '',
         Store1Price: product.Store1Price || 0,
@@ -162,6 +167,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
       setEditingProduct(null);
       setFormData({
         ProductName: '',
+        barcode: '',
         SalePrice: 0,
         Store1Name: '',
         Store1Price: 0,
@@ -393,7 +399,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
       <Box sx={{ mb: 2 }}>
         <TextField
           fullWidth
-          placeholder="ค้นหาชื่อสินค้าหรือชื่อร้าน..."
+          placeholder="ค้นหาชื่อสินค้า, บาร์โค้ด หรือชื่อร้าน..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           size="medium"
@@ -406,6 +412,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
           <TableHead>
             <TableRow sx={{ bgcolor: 'primary.main' }}>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>ชื่อสินค้า</TableCell>
+              <TableCell sx={{ color: 'white', fontWeight: 'bold', display: { xs: 'none', sm: 'table-cell' } }}>บาร์โค้ด</TableCell>
               <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold' }}>
                 ราคาขาย
               </TableCell>
@@ -429,7 +436,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
           <TableBody>
             {displayedProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">ไม่มีข้อมูลสินค้า</Typography>
                 </TableCell>
               </TableRow>
@@ -444,6 +451,9 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                 >
                   <TableCell component="th" scope="row">
                     {product.ProductName}
+                  </TableCell>
+                  <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
+                    {product.barcode || '-'}
                   </TableCell>
                   <TableCell align="right">{product.SalePrice?.toFixed(2) || '-'}</TableCell>
                   <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
@@ -543,112 +553,131 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
           {editingProduct ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่'}
         </DialogTitle>
         <DialogContent sx={{ pt: 1, overflowY: 'auto', flex: 1 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 }, mt: 0.5 }}>
-            <TextField
-              fullWidth
-              label="ชื่อสินค้า"
-              value={formData.ProductName}
-              onChange={(e) => handleInputChange('ProductName', e.target.value)}
-              required
-              size="small"
-            />
-            <TextField
-              fullWidth
-              label="ราคาขาย"
-              type="number"
-              value={formData.SalePrice || ''}
-              onChange={(e) => handleInputChange('SalePrice', e.target.value)}
-              inputProps={{ min: 0, step: 0.01 }}
-              size="small"
-            />
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 1 }}>
-              ร้านที่ 1
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 1.5, sm: 2 } }}>
-              <TextField
-                fullWidth
-                label="ชื่อร้าน"
-                value={formData.Store1Name}
-                onChange={(e) => handleInputChange('Store1Name', e.target.value)}
-                placeholder="เช่น ร้านสยาม"
-                size="small"
-              />
-              <TextField
-                fullWidth
-                label="ราคา"
-                type="number"
-                value={formData.Store1Price || ''}
-                onChange={(e) => handleInputChange('Store1Price', e.target.value)}
-                inputProps={{ min: 0, step: 0.01 }}
-                size="small"
-              />
-            </Box>
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 0.5 }}>
-              ร้านที่ 2
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 1.5, sm: 2 } }}>
-              <TextField
-                fullWidth
-                label="ชื่อร้าน"
-                value={formData.Store2Name}
-                onChange={(e) => handleInputChange('Store2Name', e.target.value)}
-                placeholder="เช่น ร้านเอกชัย"
-                size="small"
-              />
-              <TextField
-                fullWidth
-                label="ราคา"
-                type="number"
-                value={formData.Store2Price || ''}
-                onChange={(e) => handleInputChange('Store2Price', e.target.value)}
-                inputProps={{ min: 0, step: 0.01 }}
-                size="small"
-              />
-            </Box>
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 0.5 }}>
-              ร้านที่ 3
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 1.5, sm: 2 } }}>
-              <TextField
-                fullWidth
-                label="ชื่อร้าน"
-                value={formData.Store3Name}
-                onChange={(e) => handleInputChange('Store3Name', e.target.value)}
-                placeholder="เช่น ร้านไทยไทย"
-                size="small"
-              />
-              <TextField
-                fullWidth
-                label="ราคา"
-                type="number"
-                value={formData.Store3Price || ''}
-                onChange={(e) => handleInputChange('Store3Price', e.target.value)}
-                inputProps={{ min: 0, step: 0.01 }}
-                size="small"
-              />
-            </Box>
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block', mt: 0.5 }}>
-              ร้านที่ 4
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 1.5, sm: 2 } }}>
-              <TextField
-                fullWidth
-                label="ชื่อร้าน"
-                value={formData.Store4Name}
-                onChange={(e) => handleInputChange('Store4Name', e.target.value)}
-                placeholder="เช่น ร้านอรุณ"
-                size="small"
-              />
-              <TextField
-                fullWidth
-                label="ราคา"
-                type="number"
-                value={formData.Store4Price || ''}
-                onChange={(e) => handleInputChange('Store4Price', e.target.value)}
-                inputProps={{ min: 0, step: 0.01 }}
-                size="small"
-              />
-            </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 0.5 }}>
+            {/* ข้อมูลสินค้า */}
+            <Card variant="outlined" sx={{ bgcolor: 'grey.50' }}>
+              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1, display: 'block' }}>
+                  ข้อมูลสินค้า
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      label="ชื่อสินค้า"
+                      value={formData.ProductName}
+                      onChange={(e) => handleInputChange('ProductName', e.target.value)}
+                      required
+                      size="small"
+                    />
+                    <TextField
+                      fullWidth
+                      label="ราคาขาย"
+                      type="number"
+                      value={formData.SalePrice || ''}
+                      onChange={(e) => handleInputChange('SalePrice', e.target.value)}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      size="small"
+                    />
+                  </Box>
+                  <TextField
+                    fullWidth
+                    label="บาร์โค้ด (ไม่บังคับ)"
+                    value={formData.barcode || ''}
+                    onChange={(e) => handleInputChange('barcode', e.target.value)}
+                    placeholder="เช่น 8851234567890"
+                    size="small"
+                  />
+                </Box>
+              </CardContent>
+            </Card>
+
+            {/* แหล่งที่มา */}
+            <Card variant="outlined" sx={{ bgcolor: 'grey.50' }}>
+              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1, display: 'block' }}>
+                  แหล่งที่มา
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      label="ร้านที่ 1"
+                      value={formData.Store1Name}
+                      onChange={(e) => handleInputChange('Store1Name', e.target.value)}
+                      placeholder="ชื่อร้าน"
+                      size="small"
+                    />
+                    <TextField
+                      fullWidth
+                      label="ราคา"
+                      type="number"
+                      value={formData.Store1Price || ''}
+                      onChange={(e) => handleInputChange('Store1Price', e.target.value)}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      size="small"
+                    />
+                  </Box>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      label="ร้านที่ 2"
+                      value={formData.Store2Name}
+                      onChange={(e) => handleInputChange('Store2Name', e.target.value)}
+                      placeholder="ชื่อร้าน"
+                      size="small"
+                    />
+                    <TextField
+                      fullWidth
+                      label="ราคา"
+                      type="number"
+                      value={formData.Store2Price || ''}
+                      onChange={(e) => handleInputChange('Store2Price', e.target.value)}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      size="small"
+                    />
+                  </Box>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      label="ร้านที่ 3"
+                      value={formData.Store3Name}
+                      onChange={(e) => handleInputChange('Store3Name', e.target.value)}
+                      placeholder="ชื่อร้าน"
+                      size="small"
+                    />
+                    <TextField
+                      fullWidth
+                      label="ราคา"
+                      type="number"
+                      value={formData.Store3Price || ''}
+                      onChange={(e) => handleInputChange('Store3Price', e.target.value)}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      size="small"
+                    />
+                  </Box>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      label="ร้านที่ 4"
+                      value={formData.Store4Name}
+                      onChange={(e) => handleInputChange('Store4Name', e.target.value)}
+                      placeholder="ชื่อร้าน"
+                      size="small"
+                    />
+                    <TextField
+                      fullWidth
+                      label="ราคา"
+                      type="number"
+                      value={formData.Store4Price || ''}
+                      onChange={(e) => handleInputChange('Store4Price', e.target.value)}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      size="small"
+                    />
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
           </Box>
         </DialogContent>
         <DialogActions sx={{ 
