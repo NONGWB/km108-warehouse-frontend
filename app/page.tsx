@@ -18,6 +18,7 @@ import {
 import { Product } from '@/types/product';
 import ManageProducts from '@/components/ManageProducts';
 import ManageOrderNotes from '@/components/ManageOrderNotes';
+import ManageContacts from '@/components/ManageContacts';
 import NavBar from '@/components/NavBar';
 import SearchBar from '@/components/SearchBar';
 import ProductCard from '@/components/ProductCard';
@@ -260,6 +261,10 @@ export default function Home() {
 
         {tabValue === 2 && (
           <ManageOrderNotes />
+        )}
+
+        {tabValue === 3 && (
+          <ManageContacts />
         )}
       </Container>
 

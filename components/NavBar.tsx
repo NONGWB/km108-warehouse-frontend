@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { MouseEvent } from 'react';
+import { menuItems, appConfig } from '@/config/menu';
 
 interface NavBarProps {
   tabValue: number;
@@ -36,41 +37,24 @@ export default function NavBar({
           component="div" 
           sx={{ flexGrow: 1, fontWeight: 'bold' }}
         >
-          KM 108 Shop
+          {appConfig.appName}
         </Typography>
         
         {/* Desktop Menu */}
         <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1 }}>
-          <Button 
-            color="inherit" 
-            onClick={() => onMenuSelect(0)}
-            sx={{ 
-              bgcolor: tabValue === 0 ? 'rgba(255,255,255,0.15)' : 'transparent',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' }
-            }}
-          >
-            ค้นหาสินค้า
-          </Button>
-          <Button 
-            color="inherit" 
-            onClick={() => onMenuSelect(1)}
-            sx={{ 
-              bgcolor: tabValue === 1 ? 'rgba(255,255,255,0.15)' : 'transparent',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' }
-            }}
-          >
-            จัดการสินค้า
-          </Button>
-          <Button 
-            color="inherit" 
-            onClick={() => onMenuSelect(2)}
-            sx={{ 
-              bgcolor: tabValue === 2 ? 'rgba(255,255,255,0.15)' : 'transparent',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' }
-            }}
-          >
-            รายการเติมสต็อค
-          </Button>
+          {menuItems.map((item) => (
+            <Button
+              key={item.id}
+              color="inherit"
+              onClick={() => onMenuSelect(item.id)}
+              sx={{
+                bgcolor: tabValue === item.id ? 'rgba(255,255,255,0.15)' : 'transparent',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' }
+              }}
+            >
+              {item.label}
+            </Button>
+          ))}
         </Box>
 
         {/* Mobile Menu */}
@@ -95,24 +79,15 @@ export default function NavBar({
               horizontal: 'right',
             }}
           >
-            <MenuItem 
-              onClick={() => onMenuSelect(0)}
-              selected={tabValue === 0}
-            >
-              ค้นหาสินค้า
-            </MenuItem>
-            <MenuItem 
-              onClick={() => onMenuSelect(1)}
-              selected={tabValue === 1}
-            >
-              จัดการสินค้า
-            </MenuItem>
-            <MenuItem 
-              onClick={() => onMenuSelect(2)}
-              selected={tabValue === 2}
-            >
-              รายการเติมสต็อค
-            </MenuItem>
+            {menuItems.map((item) => (
+              <MenuItem
+                key={item.id}
+                onClick={() => onMenuSelect(item.id)}
+                selected={tabValue === item.id}
+              >
+                {item.label}
+              </MenuItem>
+            ))}
           </Menu>
         </Box>
       </Toolbar>
