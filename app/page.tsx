@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { Product } from '@/types/product';
 import ManageProducts from '@/components/ManageProducts';
+import ManageOrderNotes from '@/components/ManageOrderNotes';
 import NavBar from '@/components/NavBar';
 import SearchBar from '@/components/SearchBar';
 import ProductCard from '@/components/ProductCard';
@@ -255,6 +256,10 @@ export default function Home() {
 
         {tabValue === 1 && (
           <ManageProducts onProductsChange={fetchProducts} />
+        )}
+
+        {tabValue === 2 && (
+          <ManageOrderNotes />
         )}
       </Container>
 

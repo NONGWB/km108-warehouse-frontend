@@ -61,6 +61,16 @@ export default function NavBar({
           >
             จัดการสินค้า
           </Button>
+          <Button 
+            color="inherit" 
+            onClick={() => onMenuSelect(2)}
+            sx={{ 
+              bgcolor: tabValue === 2 ? 'rgba(255,255,255,0.15)' : 'transparent',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' }
+            }}
+          >
+            รายการเติมสต็อค
+          </Button>
         </Box>
 
         {/* Mobile Menu */}
@@ -96,6 +106,12 @@ export default function NavBar({
               selected={tabValue === 1}
             >
               จัดการสินค้า
+            </MenuItem>
+            <MenuItem 
+              onClick={() => onMenuSelect(2)}
+              selected={tabValue === 2}
+            >
+              รายการเติมสต็อค
             </MenuItem>
           </Menu>
         </Box>
