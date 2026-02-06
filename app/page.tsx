@@ -19,6 +19,7 @@ import { Product } from '@/types/product';
 import ManageProducts from '@/components/ManageProducts';
 import ManageOrderNotes from '@/components/ManageOrderNotes';
 import ManageContacts from '@/components/ManageContacts';
+import ManageSales from '@/components/ManageSales';
 import NavBar from '@/components/NavBar';
 import SearchBar from '@/components/SearchBar';
 import ProductCard from '@/components/ProductCard';
@@ -95,7 +96,8 @@ export default function Home() {
 
   useEffect(() => {
     const filtered = products.filter(product =>
-      product.ProductName.toLowerCase().includes(searchTerm.toLowerCase())
+      product.ProductName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.barcode && product.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
     );
     setFilteredProducts(filtered);
     setPage(1);
@@ -256,14 +258,18 @@ export default function Home() {
         )}
 
         {tabValue === 1 && (
-          <ManageProducts onProductsChange={fetchProducts} />
+          <ManageSales onSalesChange={fetchProducts} />
         )}
 
         {tabValue === 2 && (
-          <ManageOrderNotes />
+          <ManageProducts onProductsChange={fetchProducts} />
         )}
 
         {tabValue === 3 && (
+          <ManageOrderNotes />
+        )}
+
+        {tabValue === 4 && (
           <ManageContacts />
         )}
       </Container>

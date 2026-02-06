@@ -23,12 +23,15 @@ import {
   Typography,
   Card,
   CardContent,
+  InputAdornment,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DownloadIcon from '@mui/icons-material/Download';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 import { Product } from '@/types/product';
 
 interface ManageProductsProps {
@@ -411,6 +414,25 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
           onChange={(e) => setSearchQuery(e.target.value)}
           size="medium"
           sx={{ bgcolor: 'background.paper' }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: 'action.active' }} />
+              </InputAdornment>
+            ),
+            endAdornment: searchQuery && (
+              <InputAdornment position="end">
+                <IconButton
+                  aria-label="clear search"
+                  onClick={() => setSearchQuery('')}
+                  edge="end"
+                  size="small"
+                >
+                  <ClearIcon />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
         />
       </Box>
 
