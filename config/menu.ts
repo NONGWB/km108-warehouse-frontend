@@ -5,8 +5,8 @@ export interface MenuItem {
 }
 
 export const menuItems: MenuItem[] = [
-  { id: 0, label: 'ค้นหาสินค้า', key: 'search' },
-  { id: 1, label: 'ขายสินค้า', key: 'sales' },
+  { id: 0, label: 'ขายสินค้า', key: 'sales' },
+  { id: 1, label: 'ค้นหาสินค้า', key: 'search' },
   { id: 2, label: 'จัดการสินค้า', key: 'products' },
   { id: 3, label: 'รายการเติมสต็อค', key: 'stock' },
   { id: 4, label: 'ข้อมูลร้านค้า/เซลล์', key: 'contacts' },

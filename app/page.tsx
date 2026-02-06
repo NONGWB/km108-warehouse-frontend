@@ -196,7 +196,12 @@ export default function Home() {
       <Toolbar />
 
       <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
+        
         {tabValue === 0 && (
+          <ManageSales onSalesChange={fetchProducts} />
+        )}
+        
+        {tabValue === 1 && (
           <Box>
             <SearchBar
               searchTerm={searchTerm}
@@ -255,10 +260,6 @@ export default function Home() {
               </Box>
             )}
           </Box>
-        )}
-
-        {tabValue === 1 && (
-          <ManageSales onSalesChange={fetchProducts} />
         )}
 
         {tabValue === 2 && (
