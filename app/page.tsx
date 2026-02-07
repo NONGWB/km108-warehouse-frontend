@@ -16,6 +16,7 @@ import {
   Toolbar,
 } from '@mui/material';
 import { Product } from '@/types/product';
+import Dashboard from '@/components/Dashboard';
 import ManageProducts from '@/components/ManageProducts';
 import ManageOrderNotes from '@/components/ManageOrderNotes';
 import ManageContacts from '@/components/ManageContacts';
@@ -64,7 +65,22 @@ export default function Home() {
   // Wait for client mount to avoid hydration mismatch
   useEffect(() => {
     setMounted(true);
+    // Load saved tab from localStorage
+    const savedTab = localStorage.getItem('currentTab');
+    if (savedTab !== null) {
+      const tabIndex = parseInt(savedTab, 10);
+      if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex <= 5) {
+        setTabValue(tabIndex);
+      }
+    }
   }, []);
+
+  // Save tab to localStorage whenever it changes
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem('currentTab', tabValue.toString());
+    }
+  }, [tabValue, mounted]);
 
   // Helper function to safely format price with number formatting
   const formatPrice = (price: any): string => {
@@ -120,7 +136,7 @@ export default function Home() {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (tabValue !== 0) return; // Only in search tab
+      if (tabValue !== 2) return; // Only in search tab
       
       const scrollTop = window.scrollY || document.documentElement.scrollTop;
       const scrollHeight = document.documentElement.scrollHeight;
@@ -198,10 +214,14 @@ export default function Home() {
       <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
         
         {tabValue === 0 && (
-          <ManageSales onSalesChange={fetchProducts} />
+          <Dashboard />
         )}
         
         {tabValue === 1 && (
+          <ManageSales onSalesChange={fetchProducts} />
+        )}
+        
+        {tabValue === 2 && (
           <Box>
             <SearchBar
               searchTerm={searchTerm}
@@ -262,21 +282,21 @@ export default function Home() {
           </Box>
         )}
 
-        {tabValue === 2 && (
+        {tabValue === 3 && (
           <ManageProducts onProductsChange={fetchProducts} />
         )}
 
-        {tabValue === 3 && (
+        {tabValue === 4 && (
           <ManageOrderNotes />
         )}
 
-        {tabValue === 4 && (
+        {tabValue === 5 && (
           <ManageContacts />
         )}
       </Container>
 
       {/* Floating Action Button for mobile price comparison toggle */}
-      {isMobile && tabValue === 0 && !loading && filteredProducts.length > 0 && (
+      {isMobile && tabValue === 2 && !loading && filteredProducts.length > 0 && (
         <PriceComparisonFab
           showPriceComparison={showPriceComparison}
           onToggle={() => setShowPriceComparison(!showPriceComparison)}

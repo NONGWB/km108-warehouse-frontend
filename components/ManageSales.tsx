@@ -180,9 +180,15 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
     setSelectedProduct(null);
     setQuantity(1);
     setSearchTerm('');
+    showSnackbar('เพิ่มสินค้าแล้ว', 'success');
   };
 
   const updateItemQuantity = (index: number, newQuantity: number) => {
+    // ป้องกันกรณีที่ NaN หรือ undefined
+    if (isNaN(newQuantity) || newQuantity === undefined || newQuantity === null) {
+      return;
+    }
+    
     if (newQuantity <= 0) {
       removeItem(index);
       return;
@@ -655,11 +661,12 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
           >
             <Tab label="เลือกสินค้า" />
             <Tab 
-              label={
+              icon={
                 <Badge badgeContent={currentSale.items.length} color="primary">
-                  <Box>ตะกร้า</Box>
+                  <ShoppingCartIcon />
                 </Badge>
               }
+              label="ตะกร้า"
             />
           </Tabs>
         </Paper>
@@ -675,7 +682,8 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
         {/* Left Panel - Product Selection */}
         <Box sx={{ 
           flex: { xs: '1', md: '0 0 40%' },
-          display: { xs: mobileTab === 0 ? 'block' : 'none', md: 'block' }
+          display: { xs: mobileTab === 0 ? 'block' : 'none', md: 'block' },
+          pb: { xs: isMobile && currentSale.items.length > 0 ? 12 : 0, md: 0 }
         }}>
           <Card elevation={3}>
             <CardContent sx={{ p: { xs: 2, md: 3 } }}>
@@ -739,8 +747,23 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                 fullWidth
                 label="จำนวน"
                 type="number"
-                value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                value={quantity || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setQuantity(0);
+                  } else {
+                    const num = parseInt(val);
+                    if (!isNaN(num) && num >= 0) {
+                      setQuantity(num);
+                    }
+                  }
+                }}
+                onBlur={(e) => {
+                  if (e.target.value === '' || parseInt(e.target.value) < 1) {
+                    setQuantity(1);
+                  }
+                }}
                 inputProps={{ min: 1 }}
                 required
                 size={isMobile ? 'small' : 'medium'}
@@ -753,7 +776,6 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                 startIcon={<AddIcon />}
                 onClick={() => {
                   addItemToSale();
-                  if (isMobile) setMobileTab(1); // Switch to cart on mobile
                 }}
                 disabled={!selectedProduct}
                 size={isMobile ? 'medium' : 'large'}
@@ -812,8 +834,28 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                           <TableCell align="center">
                             <TextField
                               type="number"
-                              value={item.quantity}
-                              onChange={(e) => updateItemQuantity(index, parseInt(e.target.value) || 0)}
+                              value={item.quantity || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '') {
+                                  // อนุญาตให้ลบได้ชั่วคราว
+                                  const newItems = [...currentSale.items];
+                                  newItems[index].quantity = 0;
+                                  setCurrentSale({ ...currentSale, items: newItems });
+                                } else {
+                                  const newQty = parseInt(val);
+                                  if (!isNaN(newQty) && newQty >= 0) {
+                                    updateItemQuantity(index, newQty);
+                                  }
+                                }
+                              }}
+                              onBlur={(e) => {
+                                // ถ้าว่างหรือ 0 เมื่อ blur ให้กลับเป็น 1
+                                const val = e.target.value;
+                                if (val === '' || val === '0' || parseInt(val) < 1) {
+                                  updateItemQuantity(index, 1);
+                                }
+                              }}
                               inputProps={{ min: 1, style: { textAlign: 'center' } }}
                               size="small"
                               sx={{ width: 80 }}
@@ -847,11 +889,21 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                   label="ส่วนลด (บาท)"
                   type="number"
                   size={isMobile ? 'small' : 'medium'}
-                  value={currentSale.discount}
+                  value={currentSale.discount || ''}
                   onChange={(e) => {
-                    const discount = parseFloat(e.target.value) || 0;
-                    if (discount >= 0) {
-                      updateDiscount(discount);
+                    const val = e.target.value;
+                    if (val === '') {
+                      updateDiscount(0);
+                    } else {
+                      const discount = parseFloat(val);
+                      if (!isNaN(discount) && discount >= 0) {
+                        updateDiscount(discount);
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (e.target.value === '' || parseFloat(e.target.value) < 0) {
+                      updateDiscount(0);
                     }
                   }}
                   inputProps={{ min: 0, max: currentSale.total_amount }}
@@ -904,9 +956,16 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                     value={amountPaid > 0 ? amountPaid.toString() : ''}
                     onChange={(e) => {
                       const value = e.target.value;
-                      // Allow only numbers and one decimal point
-                      if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
-                        setAmountPaid(value === '' ? 0 : parseFloat(value));
+                      // Allow empty, numbers and one decimal point
+                      if (value === '') {
+                        setAmountPaid(0);
+                      } else if (/^\d*\.?\d{0,2}$/.test(value)) {
+                        setAmountPaid(parseFloat(value) || 0);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      if (e.target.value === '' || parseFloat(e.target.value) < 0) {
+                        setAmountPaid(0);
                       }
                     }}
                     InputProps={{
@@ -1117,12 +1176,70 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
         </DialogActions>
       </Dialog>
 
+      {/* Floating Summary Bar for Mobile */}
+      {isMobile && mobileTab === 0 && currentSale.items.length > 0 && (
+        <Paper
+          elevation={8}
+          sx={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            p: 2,
+            zIndex: 1000,
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            bgcolor: 'primary.main',
+            color: 'white',
+            animation: 'slideUp 0.3s ease-out',
+            '@keyframes slideUp': {
+              from: {
+                transform: 'translateY(100%)',
+                opacity: 0,
+              },
+              to: {
+                transform: 'translateY(0)',
+                opacity: 1,
+              },
+            },
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Typography variant="body2">
+              จำนวนสินค้า: {currentSale.items.length} รายการ
+            </Typography>
+            <Typography variant="h6" fontWeight="bold">
+              ฿{formatPrice(currentSale.net_amount)}
+            </Typography>
+          </Box>
+          <Button
+            fullWidth
+            variant="contained"
+            startIcon={<ShoppingCartIcon />}
+            sx={{ 
+              bgcolor: 'white', 
+              color: 'primary.main',
+              '&:hover': {
+                bgcolor: 'grey.100',
+              }
+            }}
+            onClick={() => setMobileTab(1)}
+          >
+            ไปยังตะกร้า
+          </Button>
+        </Paper>
+      )}
+
       {/* Snackbar */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={3000}
+        autoHideDuration={2000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        anchorOrigin={{ 
+          vertical: isMobile && mobileTab === 0 && currentSale.items.length > 0 ? 'top' : 'bottom', 
+          horizontal: 'center' 
+        }}
+        sx={{ mt: isMobile && mobileTab === 0 && currentSale.items.length > 0 ? 2 : 0 }}
       >
         <Alert 
           onClose={() => setSnackbar({ ...snackbar, open: false })} 
