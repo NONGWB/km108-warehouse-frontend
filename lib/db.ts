@@ -3,6 +3,7 @@ import { Product } from '@/types/product';
 
 // Database row type (snake_case from Postgres)
 interface ProductRow {
+  id?: string;
   product_name: string;
   barcode?: string;
   sale_price: number;
@@ -39,6 +40,7 @@ function toRow(product: Product): ProductRow {
 // Convert ProductRow (snake_case) to Product (PascalCase)
 function toProduct(row: ProductRow): Product {
   return {
+    id: row.id,
     ProductName: row.product_name,
     barcode: row.barcode,
     SalePrice: row.sale_price,

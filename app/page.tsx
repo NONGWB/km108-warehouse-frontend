@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, MouseEvent } from 'react';
+import { useState, useEffect, useMemo, MouseEvent } from 'react';
 import {
   Container,
   Box,
@@ -9,7 +9,6 @@ import {
   CircularProgress,
   Alert,
   ThemeProvider,
-  createTheme,
   CssBaseline,
   useMediaQuery,
   useTheme,
@@ -20,30 +19,15 @@ import Dashboard from '@/components/Dashboard';
 import ManageProducts from '@/components/ManageProducts';
 import ManageOrderNotes from '@/components/ManageOrderNotes';
 import ManageContacts from '@/components/ManageContacts';
+import ManageCustomers from '@/components/ManageCustomers';
 import ManageSales from '@/components/ManageSales';
+import InvoiceHistory from '@/components/InvoiceHistory';
 import NavBar from '@/components/NavBar';
 import SearchBar from '@/components/SearchBar';
 import ProductCard from '@/components/ProductCard';
 import ProductTable from '@/components/ProductTable';
 import PriceComparisonFab from '@/components/PriceComparisonFab';
-
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-    background: {
-      default: '#f8f9fa',
-      paper: '#ffffff',
-    },
-  },
-  typography: {
-    fontFamily: "'Google Sans', 'Roboto', 'Helvetica', 'Arial', sans-serif",
-  },
-});
+import { createAppTheme } from '@/theme';
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -57,22 +41,29 @@ export default function Home() {
   const [hasMore, setHasMore] = useState(true);
   const [showPriceComparison, setShowPriceComparison] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
   const [mounted, setMounted] = useState(false);
+  const theme = useMemo(() => createAppTheme(themeMode), [themeMode]);
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'), { noSsr: true });
   const itemsPerPage = 10;
 
   // Wait for client mount to avoid hydration mismatch
   useEffect(() => {
-    setMounted(true);
+    const savedThemeMode = sessionStorage.getItem('themeMode');
+    if (savedThemeMode === 'light' || savedThemeMode === 'dark') {
+      setThemeMode(savedThemeMode);
+    }
+
     // Load saved tab from localStorage
     const savedTab = localStorage.getItem('currentTab');
     if (savedTab !== null) {
       const tabIndex = parseInt(savedTab, 10);
-      if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex <= 5) {
+      if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex <= 7) {
         setTabValue(tabIndex);
       }
     }
+    setMounted(true);
   }, []);
 
   // Save tab to localStorage whenever it changes
@@ -164,6 +155,14 @@ export default function Home() {
     handleMenuClose();
   };
 
+  const handleThemeToggle = () => {
+    setThemeMode((currentMode) => {
+      const nextMode = currentMode === 'light' ? 'dark' : 'light';
+      sessionStorage.setItem('themeMode', nextMode);
+      return nextMode;
+    });
+  };
+
   const getBestPrice = (product: Product) => {
     const prices = [
       product.Store1Price,
@@ -206,6 +205,8 @@ export default function Home() {
         onMenuOpen={handleMenuOpen}
         onMenuClose={handleMenuClose}
         onMenuSelect={handleMenuSelect}
+        themeMode={themeMode}
+        onThemeToggle={handleThemeToggle}
       />
 
       {/* Toolbar spacer for fixed AppBar */}
@@ -219,6 +220,10 @@ export default function Home() {
         
         {tabValue === 1 && (
           <ManageSales onSalesChange={fetchProducts} />
+        )}
+
+        {tabValue === 7 && (
+          <InvoiceHistory />
         )}
         
         {tabValue === 2 && (
@@ -292,6 +297,10 @@ export default function Home() {
 
         {tabValue === 5 && (
           <ManageContacts />
+        )}
+
+        {tabValue === 6 && (
+          <ManageCustomers />
         )}
       </Container>
 

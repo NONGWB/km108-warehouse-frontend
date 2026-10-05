@@ -1,4 +1,5 @@
 export interface Product {
+  id?: string;
   ProductName: string;
   barcode?: string;
   SalePrice: number;

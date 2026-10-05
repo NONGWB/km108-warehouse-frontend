@@ -34,6 +34,11 @@ import {
   Tab,
   Badge,
   Fab,
+  List,
+  ListItemButton,
+  ListItemText,
+  Chip,
+  Tooltip,
   useTheme,
   useMediaQuery,
 } from '@mui/material';
@@ -47,25 +52,48 @@ import DraftsIcon from '@mui/icons-material/Drafts';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import { Sale, SaleItem } from '@/types/sale';
 import { Product } from '@/types/product';
+import type { Customer } from '@/types/customer';
+import { getCustomerDisplayName } from '@/types/customer';
+import {
+  createSale80mmPdfPreviewUrl,
+  openSaleA4Pdf,
+  printSale80mmPdf,
+} from '@/lib/salePdf';
 
 interface ManageSalesProps {
   onSalesChange: () => void;
 }
+
+type SaleMethod = 'cash_slip' | 'credit_invoice' | 'cash_company_receipt';
+
+const documentLabels: Record<Sale['document_type'], string> = {
+  sales_slip: 'สลิปการขาย',
+  invoice: 'ใบแจ้งหนี้',
+  company_receipt: 'ใบเสร็จรับเงิน',
+};
 
 export default function ManageSales({ onSalesChange }: ManageSalesProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingSales, setLoadingSales] = useState(true);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
   
   // Current sale form
   const [currentSale, setCurrentSale] = useState<Sale>({
     sale_date: new Date().toISOString().split('T')[0],
-    customer_name: 'customer1',
+    customer_id: null,
+    customer_name: '',
+    customer_phone: null,
+    customer_address: null,
     total_amount: 0,
     discount: 0,
     net_amount: 0,
     payment_type: 'cash',
+    document_type: 'sales_slip',
     status: 'draft',
     items: [],
   });
@@ -78,11 +106,19 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
   const [confirmDialog, setConfirmDialog] = useState(false);
   const [printDialog, setPrintDialog] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+  const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
+  const [receiptPreviewLoading, setReceiptPreviewLoading] = useState(false);
+  const [receiptPrinting, setReceiptPrinting] = useState(false);
   const [draftsDialog, setDraftsDialog] = useState(false);
   const [mobileTab, setMobileTab] = useState(0); // 0 = เลือกสินค้า, 1 = ตะกร้า
   
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  useEffect(() => () => {
+    if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
+  }, [receiptPreviewUrl]);
 
   const fetchProducts = async () => {
     try {
@@ -117,6 +153,27 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
     fetchSales();
   }, []);
 
+  useEffect(() => {
+    if (!customerSearchOpen) return;
+    const timer = setTimeout(async () => {
+      try {
+        setLoadingCustomers(true);
+        const url = customerSearchTerm
+          ? `/api/customers?search=${encodeURIComponent(customerSearchTerm)}`
+          : '/api/customers';
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to fetch customers');
+        setCustomers(await response.json());
+      } catch (error) {
+        console.error(error);
+        showSnackbar('ไม่สามารถค้นหาข้อมูลลูกค้าได้', 'error');
+      } finally {
+        setLoadingCustomers(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [customerSearchOpen, customerSearchTerm]);
+
   const showSnackbar = (message: string, severity: 'success' | 'error') => {
     setSnackbar({ open: true, message, severity });
   };
@@ -133,6 +190,14 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
     return { total, net };
   };
 
+  const getSaleMethod = (sale: Sale): SaleMethod => {
+    if (sale.payment_type === 'credit') return 'credit_invoice';
+    return sale.document_type === 'company_receipt' ? 'cash_company_receipt' : 'cash_slip';
+  };
+
+  const requiresCustomerName =
+    currentSale.payment_type === 'credit' || currentSale.document_type === 'company_receipt';
+
   const addItemToSale = () => {
     if (!selectedProduct) {
       showSnackbar('กรุณาเลือกสินค้า', 'error');
@@ -146,7 +211,9 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
 
     // Check if product already exists in items
     const existingItemIndex = currentSale.items.findIndex(
-      item => item.product_name === selectedProduct.ProductName
+      item => selectedProduct.id
+        ? item.product_id === selectedProduct.id
+        : !item.product_id && item.product_name === selectedProduct.ProductName
     );
 
     let newItems: SaleItem[];
@@ -159,6 +226,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
     } else {
       // Add new item
       const newItem: SaleItem = {
+        product_id: selectedProduct.id || null,
         product_name: selectedProduct.ProductName,
         barcode: selectedProduct.barcode,
         unit_price: selectedProduct.SalePrice,
@@ -270,10 +338,10 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
       return;
     }
 
-    // Validate customer name for credit type
-    if (currentSale.payment_type === 'credit') {
+    // Formal invoices and company receipts require a customer/company name.
+    if (requiresCustomerName) {
       if (!currentSale.customer_name || !currentSale.customer_name.trim()) {
-        showSnackbar('กรุณากรอกชื่อลูกค้าสำหรับการชำระแบบเครดิต', 'error');
+        showSnackbar('กรุณากรอกชื่อลูกค้าหรือบริษัทสำหรับเอกสาร', 'error');
         return;
       }
     }
@@ -294,7 +362,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
       const saleData = {
         ...currentSale,
         status: 'completed',
-        amount_paid: currentSale.payment_type === 'cash' ? amountPaid : currentSale.net_amount,
+        amount_paid: currentSale.payment_type === 'cash' ? amountPaid : 0,
         change_amount: currentSale.payment_type === 'cash' ? Math.max(0, amountPaid - currentSale.net_amount) : 0,
       };
 
@@ -318,249 +386,54 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
     }
   };
 
-  const handlePrintReceipt = () => {
+  const handlePrintReceipt = async () => {
     if (!completedSale) return;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      showSnackbar('ไม่สามารถเปิดหน้าต่างพิมพ์ได้', 'error');
-      return;
+    const documentType = completedSale.document_type ||
+      (completedSale.payment_type === 'credit' ? 'invoice' : 'sales_slip');
+    const isFormalDocument = documentType !== 'sales_slip';
+
+    try {
+      if (isFormalDocument) {
+        await openSaleA4Pdf(completedSale);
+        setPrintDialog(false);
+        setCompletedSale(null);
+        resetForm();
+      } else {
+        setPrintDialog(false);
+        setReceiptPreviewOpen(true);
+        setReceiptPreviewLoading(true);
+        const previewUrl = await createSale80mmPdfPreviewUrl(completedSale);
+        setReceiptPreviewUrl(previewUrl);
+      }
+    } catch (error) {
+      console.error('Error creating PDF:', error);
+      setReceiptPreviewOpen(false);
+      if (!isFormalDocument) setPrintDialog(true);
+      showSnackbar('ไม่สามารถสร้าง PDF Preview ได้', 'error');
+    } finally {
+      setReceiptPreviewLoading(false);
     }
+  };
 
-    const receiptHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>ใบเสร็จ - ${completedSale.id?.substring(0, 8)}</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body {
-            height: auto;
-            margin: 0;
-            padding: 0;
-          }
-          body {
-            font-family: 'Sarabun', 'Arial', sans-serif;
-            padding: 5px 10px;
-            max-width: 80mm;
-            margin: 0 auto;
-            color: #000;
-            line-height: 1.3;
-          }
-          .receipt {
-            background: white;
-            width: 100%;
-            max-width: 80mm;
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 3px;
-            border-bottom: 1px dashed #000;
-            padding-bottom: 2px;
-          }
-          .header h1 {
-            font-size: 13px;
-            margin-bottom: 1px;
-            color: #000;
-          }
-          .header p {
-            font-size: 9px;
-            color: #000;
-          }
-          .info {
-            margin-bottom: 3px;
-            font-size: 9px;
-          }
-          .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 1px;
-          }
-          .items {
-            margin-bottom: 3px;
-            border-bottom: 1px dashed #000;
-            padding-bottom: 2px;
-          }
-          .items h3 {
-            margin-bottom: 2px;
-            font-size: 10px;
-            color: #000;
-          }
-          .item {
-            margin-bottom: 2px;
-            font-size: 9px;
-          }
-          .item-name {
-            font-weight: bold;
-            margin-bottom: 1px;
-            color: #000;
-          }
-          .item-detail {
-            display: flex;
-            justify-content: space-between;
-            font-size: 8px;
-            color: #000;
-          }
-          .summary {
-            margin-bottom: 3px;
-          }
-          .summary-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 1px;
-            font-size: 9px;
-            color: #000;
-          }
-          .summary-row.total {
-            font-size: 11px;
-            font-weight: bold;
-            margin-top: 2px;
-            padding-top: 2px;
-            border-top: 1px solid #000;
-            color: #000;
-          }
-          .payment {
-            margin-bottom: 3px;
-            padding: 3px;
-            background: #f5f5f5;
-            border-radius: 2px;
-          }
-          .payment-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 1px;
-            font-size: 9px;
-            color: #000;
-          }
-          .change {
-            font-size: 10px;
-            font-weight: bold;
-            color: #000;
-          }
-          .footer {
-            text-align: center;
-            margin-top: 3px;
-            padding-top: 2px;
-            border-top: 1px dashed #000;
-            font-size: 8px;
-            color: #000;
-            padding-bottom: 5px;
-          }
-          .footer p {
-            margin: 1px 0;
-          }
-          @page {
-            margin: 0;
-            size: 80mm auto;
-          }
-          @media print {
-            html, body { 
-              height: auto !important;
-              margin: 0;
-              padding: 0;
-            }
-            body { padding: 5px 10px; }
-            .no-print { display: none; }
-            @page { margin: 0; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="receipt">
-          <div class="header">
-            <h1>KM 108 Shop</h1>
-            <p>065-0346095</p>
-          </div>
+  const handlePrintReceiptPreview = async () => {
+    if (!completedSale) return;
 
-          <div class="info">
-            <div class="info-row">
-              <span><strong>วันที่:</strong></span>
-              <span>${new Date(completedSale.sale_date).toLocaleDateString('th-TH', { 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric'
-              })}</span>
-            </div>
-            <div class="info-row">
-              <span><strong>เวลา:</strong></span>
-              <span>${new Date().toLocaleTimeString('th-TH')}</span>
-            </div>
-            <div class="info-row">
-              <span><strong>ลูกค้า:</strong></span>
-              <span>${completedSale.customer_name || 'customer1'}</span>
-            </div>
-            <div class="info-row">
-              <span><strong>ประเภท:</strong></span>
-              <span>${completedSale.payment_type === 'cash' ? 'เงินสด' : 'เครดิต'}</span>
-            </div>
-            <div class="info-row">
-              <span><strong>เลขที่:</strong></span>
-              <span>${completedSale.id?.substring(0, 8) || '-'}</span>
-            </div>
-          </div>
+    try {
+      setReceiptPrinting(true);
+      await printSale80mmPdf(completedSale);
+    } catch (error) {
+      console.error('Error printing receipt PDF:', error);
+      showSnackbar('ไม่สามารถเปิดหน้าต่างพิมพ์ได้ กรุณาอนุญาต Popup', 'error');
+    } finally {
+      setReceiptPrinting(false);
+    }
+  };
 
-          <div class="items">
-            <h3>รายการสินค้า</h3>
-            ${completedSale.items.map(item => `
-              <div class="item">
-                <div class="item-name">${item.product_name}</div>
-                <div class="item-detail">
-                  <span>${item.quantity} x ${formatPrice(item.unit_price)}</span>
-                  <span>฿${formatPrice(item.total_price)}</span>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-
-          <div class="summary">
-            <div class="summary-row">
-              <span>ยอดรวม:</span>
-              <span>฿${formatPrice(completedSale.total_amount)}</span>
-            </div>
-            ${completedSale.discount > 0 ? `
-              <div class="summary-row">
-                <span>ส่วนลด:</span>
-                <span>-฿${formatPrice(completedSale.discount)}</span>
-              </div>
-            ` : ''}
-            <div class="summary-row total">
-              <span>ยอดสุทธิ:</span>
-              <span>฿${formatPrice(completedSale.net_amount)}</span>
-            </div>
-          </div>
-
-          ${completedSale.payment_type === 'cash' && completedSale.amount_paid ? `
-            <div class="payment">
-              <div class="payment-row">
-                <span>รับเงินมา:</span>
-                <span>฿${formatPrice(completedSale.amount_paid)}</span>
-              </div>
-              <div class="payment-row change">
-                <span>เงินทอน:</span>
-                <span>฿${formatPrice(completedSale.change_amount || 0)}</span>
-              </div>
-            </div>
-          ` : ''}
-
-          <div class="footer">
-            <p>ขอบคุณที่อุดหนุน</p>
-            <p>โปรดเก็บใบเสร็จไว้เพื่อการคืนสินค้า</p>
-          </div>
-        </div>
-        <script>
-          window.onload = () => {
-            window.print();
-          };
-        </script>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(receiptHTML);
-    printWindow.document.close();
-    
-    setPrintDialog(false);
+  const handleCloseReceiptPreview = () => {
+    if (receiptPreviewLoading || receiptPrinting) return;
+    setReceiptPreviewOpen(false);
+    setReceiptPreviewUrl(null);
     setCompletedSale(null);
     resetForm();
   };
@@ -574,11 +447,15 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
   const resetForm = () => {
     setCurrentSale({
       sale_date: new Date().toISOString().split('T')[0],
-      customer_name: 'customer1',
+      customer_id: null,
+      customer_name: '',
+      customer_phone: null,
+      customer_address: null,
       total_amount: 0,
       discount: 0,
       net_amount: 0,
       payment_type: 'cash',
+      document_type: 'sales_slip',
       status: 'draft',
       items: [],
     });
@@ -723,7 +600,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                       <Typography variant="body2">{option.ProductName}</Typography>
                       <Typography variant="caption" color="text.secondary">
                         {option.barcode && `บาร์โค้ด: ${option.barcode} | `}
-                        ราคา: ฿{formatPrice(option.SalePrice)}
+                        ราคา: {formatPrice(option.SalePrice)}
                       </Typography>
                     </Box>
                   </li>
@@ -732,13 +609,13 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
               />
 
               {selectedProduct && (
-                <Box sx={{ mb: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'grey.100', borderRadius: 1 }}>
+                <Box sx={{ mb: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'action.hover', borderRadius: 1 }}>
                   <Typography variant="caption" color="text.secondary">
                     สินค้าที่เลือก
                   </Typography>
                   <Typography variant="subtitle1" fontWeight="bold">{selectedProduct.ProductName}</Typography>
                   <Typography variant="body2" color="primary">
-                    ราคา: ฿{formatPrice(selectedProduct.SalePrice)}
+                    ราคา: {formatPrice(selectedProduct.SalePrice)}
                   </Typography>
                 </Box>
               )}
@@ -829,7 +706,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                             )}
                           </TableCell>
                           <TableCell align="right">
-                            ฿{formatPrice(item.unit_price)}
+                            {formatPrice(item.unit_price)}
                           </TableCell>
                           <TableCell align="center">
                             <TextField
@@ -863,7 +740,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                           </TableCell>
                           <TableCell align="right">
                             <Typography fontWeight="bold">
-                              ฿{formatPrice(item.total_price)}
+                              {formatPrice(item.total_price)}
                             </Typography>
                           </TableCell>
                           <TableCell align="center">
@@ -908,43 +785,67 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                   }}
                   inputProps={{ min: 0, max: currentSale.total_amount }}
                   InputProps={{
-                    startAdornment: <InputAdornment position="start">฿</InputAdornment>,
+                    startAdornment: <InputAdornment position="start"></InputAdornment>,
                   }}
                   helperText={currentSale.discount > currentSale.total_amount ? 'ส่วนลดไม่สามารถเกินยอดรวมได้' : ''}
                   error={currentSale.discount > currentSale.total_amount}
                 />
 
-                <TextField
-                  label="ชื่อลูกค้า"
-                  type="text"
-                  size={isMobile ? 'small' : 'medium'}
-                  value={currentSale.customer_name || 'customer1'}
-                  onChange={(e) => setCurrentSale({
-                    ...currentSale,
-                    customer_name: e.target.value
-                  })}
-                  required={currentSale.payment_type === 'credit'}
-                  error={currentSale.payment_type === 'credit' && !currentSale.customer_name?.trim()}
-                  helperText={currentSale.payment_type === 'credit' && !currentSale.customer_name?.trim() ? 'กรุณากรอกชื่อลูกค้าสำหรับเครดิต' : ''}
-                />
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <TextField
+                    fullWidth
+                    label={requiresCustomerName ? 'ชื่อลูกค้า / บริษัท' : 'ชื่อลูกค้า (ไม่บังคับ)'}
+                    type="text"
+                    size={isMobile ? 'small' : 'medium'}
+                    value={currentSale.customer_name || ''}
+                    onChange={(e) => setCurrentSale({
+                      ...currentSale,
+                      customer_id: null,
+                      customer_name: e.target.value,
+                      customer_phone: null,
+                      customer_address: null,
+                    })}
+                    required={requiresCustomerName}
+                    error={requiresCustomerName && !currentSale.customer_name?.trim()}
+                    helperText={requiresCustomerName && !currentSale.customer_name?.trim() ? 'จำเป็นสำหรับออกเอกสาร' : ''}
+                  />
+                  <Tooltip title="ค้นหาข้อมูลลูกค้า">
+                    <IconButton
+                      color="primary"
+                      aria-label="ค้นหาข้อมูลลูกค้า"
+                      onClick={() => setCustomerSearchOpen(true)}
+                      sx={{ mt: 0.5, border: '1px solid', borderColor: 'divider' }}
+                    >
+                      <SearchIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
 
                 <FormControl fullWidth size={isMobile ? 'small' : 'medium'}>
-                  <InputLabel>ประเภทการชำระเงิน</InputLabel>
+                  <InputLabel>วิธีชำระและเอกสาร</InputLabel>
                   <Select
-                    value={currentSale.payment_type}
-                    label="ประเภทการชำระเงิน"
+                    value={getSaleMethod(currentSale)}
+                    label="วิธีชำระและเอกสาร"
                     onChange={(e) => {
+                      const method = e.target.value as SaleMethod;
+                      const isCredit = method === 'credit_invoice';
                       setCurrentSale({
                         ...currentSale,
-                        payment_type: e.target.value as 'cash' | 'credit'
+                        payment_type: isCredit ? 'credit' : 'cash',
+                        document_type: isCredit
+                          ? 'invoice'
+                          : method === 'cash_company_receipt'
+                            ? 'company_receipt'
+                            : 'sales_slip',
                       });
-                      if (e.target.value === 'credit') {
+                      if (isCredit) {
                         setAmountPaid(0);
                       }
                     }}
                   >
-                    <MenuItem value="cash">เงินสด</MenuItem>
-                    <MenuItem value="credit">เครดิต</MenuItem>
+                    <MenuItem value="cash_slip">เงินสด — รับสลิป</MenuItem>
+                    <MenuItem value="credit_invoice">ลงบิล (เครดิต) — ออกใบแจ้งหนี้</MenuItem>
+                    <MenuItem value="cash_company_receipt">เงินสด — ออกใบเสร็จสำหรับบริษัท</MenuItem>
                   </Select>
                 </FormControl>
 
@@ -969,7 +870,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                       }
                     }}
                     InputProps={{
-                      startAdornment: <InputAdornment position="start">฿</InputAdornment>,
+                      startAdornment: <InputAdornment position="start"></InputAdornment>,
                     }}
                     required
                     helperText={amountPaid < currentSale.net_amount ? 'จำนวนเงินไม่เพียงพอ' : ''}
@@ -977,14 +878,14 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                   />
                 )}
 
-                <Box sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 1 }}>
+                <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                     <Typography>ยอดรวม:</Typography>
-                    <Typography>฿{formatPrice(currentSale.total_amount)}</Typography>
+                    <Typography>{formatPrice(currentSale.total_amount)}</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                     <Typography>ส่วนลด:</Typography>
-                    <Typography color="error">-฿{formatPrice(currentSale.discount)}</Typography>
+                    <Typography color="error">-{formatPrice(currentSale.discount)}</Typography>
                   </Box>
                   <Divider sx={{ my: 1 }} />
                   <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -992,7 +893,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                       ยอดสุทธิ:
                     </Typography>
                     <Typography variant="h6" fontWeight="bold" color="primary">
-                      ฿{formatPrice(currentSale.net_amount)}
+                      {formatPrice(currentSale.net_amount)}
                     </Typography>
                   </Box>
                   {currentSale.payment_type === 'cash' && amountPaid > 0 && (
@@ -1000,14 +901,14 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                       <Divider sx={{ my: 1 }} />
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Typography>รับเงินมา:</Typography>
-                        <Typography>฿{formatPrice(amountPaid)}</Typography>
+                        <Typography>{formatPrice(amountPaid)}</Typography>
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Typography variant="h6" fontWeight="bold" color={amountPaid >= currentSale.net_amount ? 'success.main' : 'error.main'}>
                           เงินทอน:
                         </Typography>
                         <Typography variant="h6" fontWeight="bold" color={amountPaid >= currentSale.net_amount ? 'success.main' : 'error.main'}>
-                          ฿{formatPrice(Math.max(0, amountPaid - currentSale.net_amount))}
+                          {formatPrice(Math.max(0, amountPaid - currentSale.net_amount))}
                         </Typography>
                       </Box>
                     </>
@@ -1034,7 +935,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                       currentSale.items.length === 0 ||
                       currentSale.discount > currentSale.total_amount ||
                       (currentSale.payment_type === 'cash' && (amountPaid <= 0 || amountPaid < currentSale.net_amount)) ||
-                      (currentSale.payment_type === 'credit' && !currentSale.customer_name?.trim())
+                      (requiresCustomerName && !currentSale.customer_name?.trim())
                     }
                   >
                     จบรายการ
@@ -1064,7 +965,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5 }}>
             <Typography variant="h6" fontWeight="bold">ยอดสุทธิ:</Typography>
             <Typography variant="h6" fontWeight="bold" color="primary">
-              ฿{formatPrice(currentSale.net_amount)}
+              {formatPrice(currentSale.net_amount)}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
@@ -1085,7 +986,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                 currentSale.items.length === 0 ||
                 currentSale.discount > currentSale.total_amount ||
                 (currentSale.payment_type === 'cash' && (amountPaid <= 0 || amountPaid < currentSale.net_amount)) ||
-                (currentSale.payment_type === 'credit' && !currentSale.customer_name?.trim())
+                (requiresCustomerName && !currentSale.customer_name?.trim())
               }
               sx={{ flex: 2 }}
             >
@@ -1095,20 +996,150 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
         </Paper>
       )}
 
+      {/* Customer Search Dialog */}
+      <Dialog
+        open={customerSearchOpen}
+        onClose={() => setCustomerSearchOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle>ค้นหาข้อมูลลูกค้า</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            placeholder="ค้นหาด้วยชื่อ ชื่อบริษัท หรือเบอร์โทร..."
+            value={customerSearchTerm}
+            onChange={(event) => setCustomerSearchTerm(event.target.value)}
+            sx={{ mt: 1, mb: 2 }}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>,
+            }}
+          />
+
+          {loadingCustomers ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress size={32} />
+            </Box>
+          ) : customers.length === 0 ? (
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+              ไม่พบข้อมูลลูกค้า
+            </Typography>
+          ) : (
+            <List disablePadding>
+              {customers.map((customer) => (
+                <ListItemButton
+                  key={customer.id}
+                  divider
+                  onClick={() => {
+                    setCurrentSale({
+                      ...currentSale,
+                      customer_id: customer.id || null,
+                      customer_name: getCustomerDisplayName(customer),
+                      customer_phone: customer.phone || null,
+                      customer_address: customer.address || null,
+                    });
+                    setCustomerSearchOpen(false);
+                    setCustomerSearchTerm('');
+                  }}
+                >
+                  <ListItemText
+                    primary={getCustomerDisplayName(customer)}
+                    secondary={[customer.phone, customer.address].filter(Boolean).join(' • ') || 'ไม่มีข้อมูลติดต่อ'}
+                  />
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={customer.customer_type === 'individual' ? 'บุคคลธรรมดา' : 'นิติบุคคล'}
+                    sx={{ ml: 1 }}
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCustomerSearchOpen(false)}>ปิด</Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Print Dialog */}
       <Dialog open={printDialog} onClose={handleSkipPrint}>
         <DialogTitle>บันทึกการขายสำเร็จ</DialogTitle>
         <DialogContent>
-          <Typography>ต้องการพิมพ์ใบเสร็จหรือไม่?</Typography>
+          <Typography>
+            {(completedSale?.document_type || (completedSale?.payment_type === 'credit' ? 'invoice' : 'sales_slip')) === 'sales_slip'
+              ? 'ต้องการ Preview ใบเสร็จ 80 มม. ก่อนพิมพ์หรือไม่?'
+              : `ต้องการเปิด PDF ${completedSale
+                ? documentLabels[completedSale.document_type || (completedSale.payment_type === 'credit' ? 'invoice' : 'sales_slip')]
+                : 'เอกสาร'}หรือไม่?`}
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleSkipPrint}>ไม่พิมพ์</Button>
+          <Button onClick={handleSkipPrint}>ไม่เปิด</Button>
           <Button
             variant="contained"
             startIcon={<PrintIcon />}
             onClick={handlePrintReceipt}
           >
-            พิมพ์ใบเสร็จ
+            {(completedSale?.document_type || (completedSale?.payment_type === 'credit' ? 'invoice' : 'sales_slip')) === 'sales_slip'
+              ? 'Preview และพิมพ์'
+              : `เปิด PDF ${completedSale
+                ? documentLabels[completedSale.document_type || (completedSale.payment_type === 'credit' ? 'invoice' : 'sales_slip')]
+                : 'เอกสาร'}`}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 80 mm Receipt Preview */}
+      <Dialog
+        open={receiptPreviewOpen}
+        onClose={handleCloseReceiptPreview}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle>Preview ใบเสร็จ 80 มม.</DialogTitle>
+        <DialogContent
+          dividers
+          sx={{
+            p: 0,
+            minHeight: { xs: '70vh', sm: 620 },
+            bgcolor: 'action.hover',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {receiptPreviewLoading ? (
+            <Box sx={{ textAlign: 'center' }}>
+              <CircularProgress size={36} />
+              <Typography color="text.secondary" sx={{ mt: 2 }}>
+                กำลังสร้าง Preview...
+              </Typography>
+            </Box>
+          ) : receiptPreviewUrl ? (
+            <Box
+              component="iframe"
+              src={receiptPreviewUrl}
+              title="Preview ใบเสร็จ 80 มม."
+              sx={{ width: '100%', height: { xs: '75vh', sm: 620 }, border: 0, bgcolor: 'white' }}
+            />
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseReceiptPreview} disabled={receiptPreviewLoading || receiptPrinting}>
+            ปิด
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={receiptPrinting ? <CircularProgress size={18} color="inherit" /> : <PrintIcon />}
+            onClick={handlePrintReceiptPreview}
+            disabled={!receiptPreviewUrl || receiptPreviewLoading || receiptPrinting}
+          >
+            {receiptPrinting ? 'กำลังเปิดหน้าพิมพ์...' : 'พิมพ์ใบเสร็จ'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1147,7 +1178,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                     <TableRow key={sale.id}>
                       <TableCell>{sale.sale_date}</TableCell>
                       <TableCell>{sale.items.length} รายการ</TableCell>
-                      <TableCell align="right">฿{formatPrice(sale.net_amount)}</TableCell>
+                      <TableCell align="right">{formatPrice(sale.net_amount)}</TableCell>
                       <TableCell align="center">
                         <Button
                           size="small"
@@ -1189,8 +1220,9 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
             zIndex: 1000,
             borderTopLeftRadius: 16,
             borderTopRightRadius: 16,
-            bgcolor: 'primary.main',
+            bgcolor: 'rgba(17, 17, 24, 0.88)',
             color: 'white',
+            borderTop: '1px solid rgba(255, 255, 255, 0.12)',
             animation: 'slideUp 0.3s ease-out',
             '@keyframes slideUp': {
               from: {
@@ -1209,7 +1241,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
               จำนวนสินค้า: {currentSale.items.length} รายการ
             </Typography>
             <Typography variant="h6" fontWeight="bold">
-              ฿{formatPrice(currentSale.net_amount)}
+              {formatPrice(currentSale.net_amount)}
             </Typography>
           </Box>
           <Button

@@ -1,6 +1,7 @@
 export interface SaleItem {
   id?: string;
   sale_id?: string;
+  product_id?: string | null;
   product_name: string;
   barcode?: string;
   unit_price: number; // ราคาที่ขาย ณ ตอนนั้น
@@ -11,12 +12,19 @@ export interface SaleItem {
 
 export interface Sale {
   id?: string;
+  document_number?: string | null;
   sale_date: string;
+  customer_id?: string | null;
   customer_name?: string; // ชื่อลูกค้า (required สำหรับ credit)
+  customer_phone?: string | null;
+  customer_address?: string | null;
   total_amount: number;
   discount: number;
   net_amount: number;
   payment_type: 'cash' | 'credit';
+  document_type: 'sales_slip' | 'invoice' | 'company_receipt';
+  payment_status?: 'unpaid' | 'paid';
+  paid_at?: string | null;
   amount_paid?: number; // จำนวนเงินที่ลูกค้าจ่าย (สำหรับเงินสด)
   change_amount?: number; // เงินทอน (คำนวณจาก amount_paid - net_amount)
   status: 'draft' | 'completed';

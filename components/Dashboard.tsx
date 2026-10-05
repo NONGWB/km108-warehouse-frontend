@@ -230,16 +230,16 @@ export default function Dashboard() {
       >
           <StatCard
             title="ยอดขายวันนี้"
-            value={`฿${formatCurrency(stats.sales.today)}`}
-            subtitle={`เมื่อวาน: ฿${formatCurrency(stats.sales.yesterday)}`}
+            value={`${formatCurrency(stats.sales.today)}`}
+            subtitle={`เมื่อวาน: ${formatCurrency(stats.sales.yesterday)}`}
             trend={stats.sales.todayChange}
             icon={<AttachMoney />}
             color="#2e7d32"
           />
         <StatCard
             title="ยอดขายเดือนนี้"
-            value={`฿${formatCurrency(stats.sales.thisMonth)}`}
-            subtitle={`เดือนที่แล้ว: ฿${formatCurrency(stats.sales.lastMonth)}`}
+            value={`${formatCurrency(stats.sales.thisMonth)}`}
+            subtitle={`เดือนที่แล้ว: ${formatCurrency(stats.sales.lastMonth)}`}
             trend={stats.sales.monthChange}
             icon={<TrendingUp />}
             color="#1976d2"
@@ -287,7 +287,7 @@ export default function Dashboard() {
           />
         <StatCard
             title="มูลค่าสินค้าคงคลัง"
-            value={`฿${formatCurrency(stats.stats.inventoryValue)}`}
+            value={`${formatCurrency(stats.stats.inventoryValue)}`}
             subtitle="มูลค่ารวมทั้งหมด"
             icon={<AttachMoney />}
             color="#0288d1"

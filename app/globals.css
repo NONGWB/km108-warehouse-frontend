@@ -45,7 +45,8 @@ body {
 
 body {
   font-family: 'Google Sans', 'Roboto', 'Helvetica', 'Arial', sans-serif;
-  background-color: #f8f9fa;
+  min-height: 100vh;
+  background-color: #050507;
 }
 
 a {

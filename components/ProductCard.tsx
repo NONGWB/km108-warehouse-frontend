@@ -36,13 +36,18 @@ export default function ProductCard({
     <Card elevation={1} sx={{ borderRadius: 1 }}>
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography 
-            variant="body2" 
-            color="primary" 
-            sx={{ fontWeight: 'bold', fontSize: '0.875rem', flex: 1, mr: 1 }}
-          >
-            {product.ProductName}
-          </Typography>
+          <Box sx={{ flex: 1, mr: 1, minWidth: 0 }}>
+            <Typography
+              variant="body2"
+              color="primary"
+              sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}
+            >
+              {product.ProductName}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              บาร์โค้ด: {product.barcode || '-'}
+            </Typography>
+          </Box>
           <Typography 
             variant="body2" 
             color="secondary" 

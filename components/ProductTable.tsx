@@ -65,7 +65,14 @@ export default function ProductTable({
               }}
             >
               <TableCell component="th" scope="row">
-                {product.ProductName}
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                    {product.ProductName}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    บาร์โค้ด: {product.barcode || '-'}
+                  </Typography>
+                </Box>
               </TableCell>
               <TableCell align="right" sx={{ fontWeight: 'bold', color: 'secondary.main' }}>
                 {formatPrice(product.SalePrice)}

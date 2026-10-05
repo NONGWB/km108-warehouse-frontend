@@ -584,7 +584,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
         <DialogContent sx={{ pt: 1, overflowY: 'auto', flex: 1 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 0.5 }}>
             {/* ข้อมูลสินค้า */}
-            <Card variant="outlined" sx={{ bgcolor: 'grey.50' }}>
+            <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
               <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                 <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1, display: 'block' }}>
                   ข้อมูลสินค้า
@@ -622,7 +622,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
             </Card>
 
             {/* แหล่งที่มา */}
-            <Card variant="outlined" sx={{ bgcolor: 'grey.50' }}>
+            <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
               <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                 <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1, display: 'block' }}>
                   แหล่งที่มา
