@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS sale_items (
   product_name VARCHAR(255) NOT NULL,
   barcode VARCHAR(100),
   unit_price DECIMAL(10, 2) NOT NULL,
-  quantity INTEGER NOT NULL DEFAULT 1,
+  quantity NUMERIC(10, 3) NOT NULL DEFAULT 1 CHECK (quantity > 0),
   total_price DECIMAL(10, 2) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );

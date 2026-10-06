@@ -212,7 +212,10 @@ export default function Home() {
       {/* Toolbar spacer for fixed AppBar */}
       <Toolbar />
 
-      <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
+      <Container
+        maxWidth="lg"
+        sx={{ py: tabValue === 1 ? { xs: 1, md: 1 } : { xs: 2, md: 4 } }}
+      >
         
         {tabValue === 0 && (
           <Dashboard />

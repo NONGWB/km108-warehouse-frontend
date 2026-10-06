@@ -3,6 +3,26 @@ import { supabase } from '@/lib/supabase';
 
 type PaymentType = 'cash' | 'credit';
 type DocumentType = 'sales_slip' | 'invoice' | 'company_receipt';
+const MAX_QUANTITY = 9_999_999.999;
+
+function getSaleItemsValidationError(items: unknown): string | null {
+  if (items === undefined || items === null) return null;
+  if (!Array.isArray(items)) return 'Items must be an array';
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index] as { quantity?: unknown };
+    const rawQuantity = item?.quantity;
+    const quantityText = String(rawQuantity ?? '');
+    const quantity = Number(rawQuantity);
+    const hasValidPrecision = /^\d{1,7}(?:\.\d{1,3})?$/.test(quantityText);
+
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_QUANTITY || !hasValidPrecision) {
+      return `Invalid quantity at item ${index + 1}: use a positive number with no more than 3 decimal places`;
+    }
+  }
+
+  return null;
+}
 
 function resolveDocumentType(paymentType: PaymentType, documentType?: DocumentType): DocumentType {
   return documentType || (paymentType === 'credit' ? 'invoice' : 'sales_slip');
@@ -84,6 +104,11 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { sale_date, customer_id, customer_name, customer_phone, customer_address, total_amount, discount, net_amount, payment_type, document_type, amount_paid, change_amount, status, items } = body;
     const resolvedDocumentType = resolveDocumentType(payment_type, document_type);
+    const itemsValidationError = getSaleItemsValidationError(items);
+
+    if (itemsValidationError) {
+      return NextResponse.json({ error: itemsValidationError }, { status: 400 });
+    }
 
     if (!isValidSaleMethod(payment_type, resolvedDocumentType)) {
       return NextResponse.json({ error: 'Invalid payment and document type combination' }, { status: 400 });
@@ -120,7 +145,7 @@ export async function POST(request: Request) {
         product_name: item.product_name,
         barcode: item.barcode,
         unit_price: item.unit_price,
-        quantity: item.quantity,
+        quantity: Number(item.quantity),
         total_price: item.total_price
       }));
 
@@ -159,6 +184,11 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { id, sale_date, customer_id, customer_name, customer_phone, customer_address, total_amount, discount, net_amount, payment_type, document_type, amount_paid, change_amount, status, items } = body;
     const resolvedDocumentType = resolveDocumentType(payment_type, document_type);
+    const itemsValidationError = getSaleItemsValidationError(items);
+
+    if (itemsValidationError) {
+      return NextResponse.json({ error: itemsValidationError }, { status: 400 });
+    }
 
     if (!isValidSaleMethod(payment_type, resolvedDocumentType)) {
       return NextResponse.json({ error: 'Invalid payment and document type combination' }, { status: 400 });
@@ -202,7 +232,7 @@ export async function PUT(request: Request) {
         product_name: item.product_name,
         barcode: item.barcode,
         unit_price: item.unit_price,
-        quantity: item.quantity,
+        quantity: Number(item.quantity),
         total_price: item.total_price
       }));
 

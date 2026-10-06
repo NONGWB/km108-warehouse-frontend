@@ -29,7 +29,6 @@ import {
   FormControl,
   InputLabel,
   Divider,
-  Autocomplete,
   Tabs,
   Tab,
   Badge,
@@ -41,6 +40,8 @@ import {
   Tooltip,
   useTheme,
   useMediaQuery,
+  Pagination,
+  CardActionArea,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -54,6 +55,7 @@ import { Sale, SaleItem } from '@/types/sale';
 import { Product } from '@/types/product';
 import type { Customer } from '@/types/customer';
 import { getCustomerDisplayName } from '@/types/customer';
+import ProductThumbnail from '@/components/ProductThumbnail';
 import {
   createSale80mmPdfPreviewUrl,
   openSaleA4Pdf,
@@ -71,6 +73,86 @@ const documentLabels: Record<Sale['document_type'], string> = {
   invoice: 'ใบแจ้งหนี้',
   company_receipt: 'ใบเสร็จรับเงิน',
 };
+
+const PRODUCTS_PER_PAGE = 10;
+const MAX_NUMERIC_DIGITS = 10;
+const MAX_NUMERIC_VALUE = 9_999_999_999;
+const MAX_QUANTITY = 9_999_999.999;
+const QUANTITY_DECIMAL_PLACES = 3;
+
+const hasValidNumericLength = (value: string) => {
+  if (value === '') return true;
+  const numericValue = Number(value);
+  return (
+    (value.match(/\d/g) || []).length <= MAX_NUMERIC_DIGITS
+    && Number.isFinite(numericValue)
+    && numericValue >= 0
+    && numericValue <= MAX_NUMERIC_VALUE
+  );
+};
+
+const isValidQuantityInput = (value: string) => {
+  if (value === '') return true;
+  if (!/^\d{1,7}(?:\.\d{0,3})?$/.test(value)) return false;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue >= 0 && numericValue <= MAX_QUANTITY;
+};
+
+const roundQuantity = (value: number) =>
+  Math.round((value + Number.EPSILON) * 10 ** QUANTITY_DECIMAL_PLACES) / 10 ** QUANTITY_DECIMAL_PLACES;
+
+const roundMoney = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
+
+const formatQuantity = (value: number) => String(roundQuantity(value));
+
+interface QuantityInputProps {
+  value: number;
+  onChange: (value: number) => void;
+}
+
+function QuantityInput({ value, onChange }: QuantityInputProps) {
+  const [inputValue, setInputValue] = useState(formatQuantity(value));
+
+  useEffect(() => {
+    setInputValue(formatQuantity(value));
+  }, [value]);
+
+  return (
+    <TextField
+      type="text"
+      value={inputValue}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        if (!isValidQuantityInput(nextValue)) return;
+        setInputValue(nextValue);
+
+        if (nextValue !== '' && !nextValue.endsWith('.')) {
+          const numericValue = Number(nextValue);
+          if (numericValue > 0) onChange(roundQuantity(numericValue));
+        }
+      }}
+      onBlur={() => {
+        const numericValue = Number(inputValue);
+        if (!inputValue || !Number.isFinite(numericValue) || numericValue <= 0) {
+          setInputValue(formatQuantity(value));
+          return;
+        }
+
+        const normalizedValue = roundQuantity(numericValue);
+        setInputValue(formatQuantity(normalizedValue));
+        onChange(normalizedValue);
+      }}
+      inputProps={{
+        inputMode: 'decimal',
+        maxLength: 11,
+        style: { textAlign: 'center' },
+      }}
+      size="small"
+      sx={{ width: 88 }}
+    />
+  );
+}
 
 export default function ManageSales({ onSalesChange }: ManageSalesProps) {
   const [products, setProducts] = useState<Product[]>([]);
@@ -99,8 +181,9 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
   });
   
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [quantity, setQuantity] = useState<number>(1);
+  const [quantity, setQuantity] = useState('1');
   const [searchTerm, setSearchTerm] = useState('');
+  const [productPage, setProductPage] = useState(1);
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
   const [confirmDialog, setConfirmDialog] = useState(false);
@@ -185,8 +268,8 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
   };
 
   const calculateTotals = (items: SaleItem[], discount: number) => {
-    const total = items.reduce((sum, item) => sum + item.total_price, 0);
-    const net = Math.max(0, total - discount);
+    const total = roundMoney(items.reduce((sum, item) => sum + item.total_price, 0));
+    const net = roundMoney(Math.max(0, total - discount));
     return { total, net };
   };
 
@@ -204,10 +287,13 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
       return;
     }
 
-    if (quantity <= 0) {
+    const parsedQuantity = Number(quantity);
+    if (!isValidQuantityInput(quantity) || !Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
       showSnackbar('กรุณากรอกจำนวนที่ถูกต้อง', 'error');
       return;
     }
+
+    const normalizedQuantity = roundQuantity(parsedQuantity);
 
     // Check if product already exists in items
     const existingItemIndex = currentSale.items.findIndex(
@@ -220,9 +306,17 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
     if (existingItemIndex >= 0) {
       // Update quantity
       newItems = [...currentSale.items];
-      newItems[existingItemIndex].quantity += quantity;
-      newItems[existingItemIndex].total_price = 
-        newItems[existingItemIndex].unit_price * newItems[existingItemIndex].quantity;
+      const combinedQuantity = roundQuantity(
+        newItems[existingItemIndex].quantity + normalizedQuantity,
+      );
+      if (combinedQuantity > MAX_QUANTITY) {
+        showSnackbar('จำนวนสินค้ารวมเกินค่าที่รองรับ', 'error');
+        return;
+      }
+      newItems[existingItemIndex].quantity = combinedQuantity;
+      newItems[existingItemIndex].total_price = roundMoney(
+        newItems[existingItemIndex].unit_price * combinedQuantity,
+      );
     } else {
       // Add new item
       const newItem: SaleItem = {
@@ -230,8 +324,8 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
         product_name: selectedProduct.ProductName,
         barcode: selectedProduct.barcode,
         unit_price: selectedProduct.SalePrice,
-        quantity: quantity,
-        total_price: selectedProduct.SalePrice * quantity,
+        quantity: normalizedQuantity,
+        total_price: roundMoney(selectedProduct.SalePrice * normalizedQuantity),
       };
       newItems = [...currentSale.items, newItem];
     }
@@ -246,7 +340,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
 
     // Reset
     setSelectedProduct(null);
-    setQuantity(1);
+    setQuantity('1');
     setSearchTerm('');
     showSnackbar('เพิ่มสินค้าแล้ว', 'success');
   };
@@ -262,9 +356,12 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
       return;
     }
 
+    if (newQuantity > MAX_QUANTITY) return;
+
     const newItems = [...currentSale.items];
-    newItems[index].quantity = newQuantity;
-    newItems[index].total_price = newItems[index].unit_price * newQuantity;
+    const normalizedQuantity = roundQuantity(newQuantity);
+    newItems[index].quantity = normalizedQuantity;
+    newItems[index].total_price = roundMoney(newItems[index].unit_price * normalizedQuantity);
 
     const { total, net } = calculateTotals(newItems, currentSale.discount);
     setCurrentSale({
@@ -460,7 +557,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
       items: [],
     });
     setSelectedProduct(null);
-    setQuantity(1);
+    setQuantity('1');
     setSearchTerm('');
     setAmountPaid(0);
   };
@@ -492,6 +589,36 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
     return p.ProductName.toLowerCase().includes(term) || 
            (p.barcode && p.barcode.toLowerCase().includes(term));
   });
+  const productPageCount = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
+  const visibleProducts = filteredProducts.slice(
+    (productPage - 1) * PRODUCTS_PER_PAGE,
+    productPage * PRODUCTS_PER_PAGE,
+  );
+
+  useEffect(() => {
+    setProductPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (productPage > productPageCount) setProductPage(productPageCount);
+  }, [productPage, productPageCount]);
+
+  const handleProductSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    if (!normalizedSearch) return;
+
+    const exactBarcodeProduct = products.find(
+      (product) => product.barcode?.trim().toLowerCase() === normalizedSearch,
+    );
+
+    if (exactBarcodeProduct) {
+      event.preventDefault();
+      setSelectedProduct(exactBarcodeProduct);
+      setQuantity('1');
+    }
+  };
 
   if (loadingProducts) {
     return (
@@ -502,8 +629,15 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
   }
 
   return (
-    <Box sx={{ p: { xs: 1, md: 3 }, pb: { xs: 10, md: 3 } }}>
-      <Box sx={{ mb: { xs: 2, md: 3 }, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+    <Box sx={{
+      p: { xs: 1, md: 1.5 },
+      pb: { xs: 10, md: 1.5 },
+      height: { md: 'calc(100vh - 80px)' },
+      display: { md: 'flex' },
+      flexDirection: { md: 'column' },
+      overflow: { md: 'hidden' },
+    }}>
+      <Box sx={{ mb: { xs: 2, md: 1 }, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
         <Typography variant="h5" component="h2" fontWeight="bold" sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
           ขายสินค้า - POS
         </Typography>
@@ -553,112 +687,210 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
         sx={{ 
           display: 'flex',
           flexDirection: { xs: 'column', md: 'row' },
-          gap: { xs: 2, md: 3 }
+          gap: { xs: 2, md: 2 },
+          flex: { md: 1 },
+          minHeight: { md: 0 },
         }}
       >
         {/* Left Panel - Product Selection */}
         <Box sx={{ 
-          flex: { xs: '1', md: '0 0 40%' },
+          flex: { xs: '1', md: '0 0 62%' },
           display: { xs: mobileTab === 0 ? 'block' : 'none', md: 'block' },
-          pb: { xs: isMobile && currentSale.items.length > 0 ? 12 : 0, md: 0 }
+          pb: { xs: isMobile && currentSale.items.length > 0 ? 12 : 0, md: 0 },
+          height: { md: '100%' },
+          minHeight: 0,
         }}>
-          <Card elevation={3}>
-            <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+          <Card elevation={3} sx={{ height: { md: '100%' }, overflow: { md: 'hidden' } }}>
+            <CardContent sx={{ p: { xs: 2, md: 2 }, height: { md: '100%' }, '&:last-child': { pb: { xs: 2, md: 2 } } }}>
               <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}>
                 เลือกสินค้า
               </Typography>
 
-              <Autocomplete
+              <TextField
                 fullWidth
-                options={filteredProducts}
-                getOptionLabel={(option) => 
-                  `${option.ProductName}${option.barcode ? ` (${option.barcode})` : ''}`
-                }
-                value={selectedProduct}
-                onChange={(_, newValue) => setSelectedProduct(newValue)}
-                inputValue={searchTerm}
-                onInputChange={(_, newValue) => setSearchTerm(newValue)}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    placeholder="ค้นหาชื่อสินค้าหรือบาร์โค้ด..."
-                    size={isMobile ? 'small' : 'medium'}
-                    InputProps={{
-                      ...params.InputProps,
-                      startAdornment: (
-                        <>
-                          <SearchIcon sx={{ color: 'action.active', mr: 1 }} />
-                          {params.InputProps.startAdornment}
-                        </>
-                      ),
-                    }}
-                  />
-                )}
-                renderOption={(props, option) => (
-                  <li {...props} key={option.ProductName}>
-                    <Box>
-                      <Typography variant="body2">{option.ProductName}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {option.barcode && `บาร์โค้ด: ${option.barcode} | `}
-                        ราคา: {formatPrice(option.SalePrice)}
-                      </Typography>
-                    </Box>
-                  </li>
-                )}
-                sx={{ mb: 2 }}
+                autoFocus
+                placeholder="ค้นหาชื่อสินค้าหรือสแกนบาร์โค้ด..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                onKeyDown={handleProductSearchKeyDown}
+                size="small"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ color: 'action.active' }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchTerm ? (
+                    <InputAdornment position="end">
+                      <IconButton
+                        size="small"
+                        aria-label="ล้างคำค้นหา"
+                        onClick={() => setSearchTerm('')}
+                      >
+                        <ClearIcon />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : undefined,
+                }}
+                sx={{ mb: 1 }}
               />
 
-              {selectedProduct && (
-                <Box sx={{ mb: 2, p: { xs: 1.5, md: 2 }, bgcolor: 'action.hover', borderRadius: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  พบ {filteredProducts.length} รายการ
+                </Typography>
+                {filteredProducts.length > PRODUCTS_PER_PAGE && (
                   <Typography variant="caption" color="text.secondary">
-                    สินค้าที่เลือก
+                    หน้า {productPage}/{productPageCount}
                   </Typography>
-                  <Typography variant="subtitle1" fontWeight="bold">{selectedProduct.ProductName}</Typography>
-                  <Typography variant="body2" color="primary">
-                    ราคา: {formatPrice(selectedProduct.SalePrice)}
-                  </Typography>
+                )}
+              </Box>
+
+              {visibleProducts.length === 0 ? (
+                <Paper variant="outlined" sx={{ p: 4, mb: 2, textAlign: 'center' }}>
+                  <Typography color="text.secondary">ไม่พบสินค้าที่ค้นหา</Typography>
+                </Paper>
+              ) : (
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: 'repeat(2, minmax(0, 1fr))',
+                      sm: 'repeat(3, minmax(0, 1fr))',
+                      md: 'repeat(5, minmax(0, 1fr))',
+                    },
+                    gap: { xs: 1, md: 0.75 },
+                    mb: 1,
+                  }}
+                >
+                  {visibleProducts.map((product) => {
+                    const isSelected = selectedProduct?.id
+                      ? selectedProduct.id === product.id
+                      : selectedProduct?.ProductName === product.ProductName;
+
+                    return (
+                      <Card
+                        key={product.id || product.ProductName}
+                        variant="outlined"
+                        sx={{
+                          minWidth: 0,
+                          borderWidth: isSelected ? 2 : 1,
+                          borderColor: isSelected ? 'primary.main' : 'divider',
+                          bgcolor: isSelected ? 'action.selected' : 'background.paper',
+                        }}
+                      >
+                        <CardActionArea
+                          onClick={() => {
+                            setSelectedProduct(product);
+                            setQuantity('1');
+                          }}
+                          sx={{ p: 0.5, height: '100%', alignItems: 'stretch' }}
+                        >
+                          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                            <ProductThumbnail
+                              product={product}
+                              size={isMobile ? '100%' : 84}
+                              borderRadius={1.5}
+                            />
+                          </Box>
+                          <Typography
+                            variant="body2"
+                            fontWeight={700}
+                            sx={{
+                              mt: 0.5,
+                              lineHeight: 1.25,
+                              minHeight: '2.5em',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {product.ProductName}
+                          </Typography>
+                          <Typography variant="body2" color="primary" fontWeight={700}>
+                            {formatPrice(product.SalePrice)} บาท
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            noWrap
+                            sx={{ display: 'block' }}
+                          >
+                            {product.barcode || 'ไม่มีบาร์โค้ด'}
+                          </Typography>
+                        </CardActionArea>
+                      </Card>
+                    );
+                  })}
                 </Box>
               )}
 
-              <TextField
-                fullWidth
-                label="จำนวน"
-                type="number"
-                value={quantity || ''}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === '') {
-                    setQuantity(0);
-                  } else {
-                    const num = parseInt(val);
-                    if (!isNaN(num) && num >= 0) {
-                      setQuantity(num);
-                    }
-                  }
-                }}
-                onBlur={(e) => {
-                  if (e.target.value === '' || parseInt(e.target.value) < 1) {
-                    setQuantity(1);
-                  }
-                }}
-                inputProps={{ min: 1 }}
-                required
-                size={isMobile ? 'small' : 'medium'}
-                sx={{ mb: 2 }}
-              />
+              {productPageCount > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+                  <Pagination
+                    count={productPageCount}
+                    page={productPage}
+                    onChange={(_, pageNumber) => setProductPage(pageNumber)}
+                    size="small"
+                    color="primary"
+                    showFirstButton
+                    showLastButton
+                  />
+                </Box>
+              )}
 
-              <Button
-                fullWidth
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => {
-                  addItemToSale();
-                }}
-                disabled={!selectedProduct}
-                size={isMobile ? 'medium' : 'large'}
-              >
-                เพิ่มสินค้าในรายการ
-              </Button>
+              {selectedProduct && (
+                <Box sx={{ mb: 1, p: 1, bgcolor: 'action.hover', borderRadius: 1, display: { xs: 'flex', md: 'none' }, gap: 1, alignItems: 'center' }}>
+                  <ProductThumbnail product={selectedProduct} size={48} borderRadius={1.5} />
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      สินค้าที่เลือก
+                    </Typography>
+                    <Typography variant="body2" fontWeight="bold">{selectedProduct.ProductName}</Typography>
+                    <Typography variant="body2" color="primary">
+                      ราคา: {formatPrice(selectedProduct.SalePrice)}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+
+              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
+                <TextField
+                  label="จำนวน"
+                  type="text"
+                  value={quantity}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (isValidQuantityInput(val)) setQuantity(val);
+                  }}
+                  onBlur={(e) => {
+                    const numericValue = Number(e.target.value);
+                    if (!e.target.value || !Number.isFinite(numericValue) || numericValue <= 0) {
+                      setQuantity('1');
+                    } else {
+                      setQuantity(formatQuantity(numericValue));
+                    }
+                  }}
+                  inputProps={{ inputMode: 'decimal', maxLength: 11 }}
+                  required
+                  size="small"
+                  sx={{ width: { xs: '100%', sm: 140 } }}
+                />
+
+                <Button
+                  fullWidth
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={() => {
+                    addItemToSale();
+                  }}
+                  disabled={!selectedProduct}
+                  size="medium"
+                >
+                  เพิ่มสินค้าในรายการ
+                </Button>
+              </Box>
             </CardContent>
           </Card>
         </Box>
@@ -666,15 +898,76 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
         {/* Right Panel - Shopping Cart */}
         <Box sx={{ 
           flex: 1,
-          display: { xs: mobileTab === 1 ? 'block' : 'none', md: 'block' }
+          display: { xs: mobileTab === 1 ? 'block' : 'none', md: 'block' },
+          height: { md: '100%' },
+          minWidth: 0,
+          minHeight: 0,
         }}>
-          <Card elevation={3}>
-            <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+          <Card elevation={3} sx={{ height: { md: '100%' }, overflow: { md: 'hidden' } }}>
+            <CardContent sx={{ p: { xs: 2, md: 2 }, height: { md: '100%' }, overflow: { md: 'hidden' }, '&:last-child': { pb: { xs: 2, md: 2 } } }}>
               <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}>
                 รายการสินค้า ({currentSale.items.length})
               </Typography>
 
-              <TableContainer sx={{ maxHeight: { xs: '40vh', md: 400 }, mb: 2 }}>
+              <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                <InputLabel>วิธีชำระและเอกสาร</InputLabel>
+                <Select
+                  value={getSaleMethod(currentSale)}
+                  label="วิธีชำระและเอกสาร"
+                  onChange={(e) => {
+                    const method = e.target.value as SaleMethod;
+                    const isCredit = method === 'credit_invoice';
+                    setCurrentSale({
+                      ...currentSale,
+                      payment_type: isCredit ? 'credit' : 'cash',
+                      document_type: isCredit
+                        ? 'invoice'
+                        : method === 'cash_company_receipt'
+                          ? 'company_receipt'
+                          : 'sales_slip',
+                    });
+                    if (isCredit) {
+                      setAmountPaid(0);
+                    }
+                  }}
+                >
+                  <MenuItem value="cash_slip">เงินสด — รับสลิป</MenuItem>
+                  <MenuItem value="credit_invoice">ลงบิล (เครดิต) — ออกใบแจ้งหนี้</MenuItem>
+                  <MenuItem value="cash_company_receipt">เงินสด — ออกใบเสร็จสำหรับบริษัท</MenuItem>
+                </Select>
+              </FormControl>
+
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
+                <TextField
+                  fullWidth
+                  label={requiresCustomerName ? 'ชื่อลูกค้า / บริษัท' : 'ชื่อลูกค้า (ไม่บังคับ)'}
+                  type="text"
+                  size="small"
+                  value={currentSale.customer_name || ''}
+                  onChange={(e) => setCurrentSale({
+                    ...currentSale,
+                    customer_id: null,
+                    customer_name: e.target.value,
+                    customer_phone: null,
+                    customer_address: null,
+                  })}
+                  required={requiresCustomerName}
+                  error={requiresCustomerName && !currentSale.customer_name?.trim()}
+                  helperText={requiresCustomerName && !currentSale.customer_name?.trim() ? 'จำเป็นสำหรับออกเอกสาร' : ''}
+                />
+                <Tooltip title="ค้นหาข้อมูลลูกค้า">
+                  <IconButton
+                    color="primary"
+                    aria-label="ค้นหาข้อมูลลูกค้า"
+                    onClick={() => setCustomerSearchOpen(true)}
+                    sx={{ mt: 0.5, border: '1px solid', borderColor: 'divider' }}
+                  >
+                    <SearchIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+
+              <TableContainer sx={{ maxHeight: { xs: '40vh', md: 180 }, mb: 1 }}>
                 <Table stickyHeader size="small">
                   <TableHead>
                     <TableRow>
@@ -688,7 +981,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                   <TableBody>
                     {currentSale.items.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                        <TableCell colSpan={5} align="center" sx={{ py: 2 }}>
                           <Typography color="text.secondary">
                             ยังไม่มีสินค้าในรายการ
                           </Typography>
@@ -709,33 +1002,9 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                             {formatPrice(item.unit_price)}
                           </TableCell>
                           <TableCell align="center">
-                            <TextField
-                              type="number"
-                              value={item.quantity || ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (val === '') {
-                                  // อนุญาตให้ลบได้ชั่วคราว
-                                  const newItems = [...currentSale.items];
-                                  newItems[index].quantity = 0;
-                                  setCurrentSale({ ...currentSale, items: newItems });
-                                } else {
-                                  const newQty = parseInt(val);
-                                  if (!isNaN(newQty) && newQty >= 0) {
-                                    updateItemQuantity(index, newQty);
-                                  }
-                                }
-                              }}
-                              onBlur={(e) => {
-                                // ถ้าว่างหรือ 0 เมื่อ blur ให้กลับเป็น 1
-                                const val = e.target.value;
-                                if (val === '' || val === '0' || parseInt(val) < 1) {
-                                  updateItemQuantity(index, 1);
-                                }
-                              }}
-                              inputProps={{ min: 1, style: { textAlign: 'center' } }}
-                              size="small"
-                              sx={{ width: 80 }}
+                            <QuantityInput
+                              value={item.quantity}
+                              onChange={(newQuantity) => updateItemQuantity(index, newQuantity)}
                             />
                           </TableCell>
                           <TableCell align="right">
@@ -759,16 +1028,17 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                 </Table>
               </TableContainer>
 
-              <Divider sx={{ my: { xs: 1.5, md: 2 } }} />
+              <Divider sx={{ my: 1 }} />
 
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, md: 2 } }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <TextField
                   label="ส่วนลด (บาท)"
                   type="number"
-                  size={isMobile ? 'small' : 'medium'}
+                  size="small"
                   value={currentSale.discount || ''}
                   onChange={(e) => {
                     const val = e.target.value;
+                    if (!hasValidNumericLength(val)) return;
                     if (val === '') {
                       updateDiscount(0);
                     } else {
@@ -783,80 +1053,33 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                       updateDiscount(0);
                     }
                   }}
-                  inputProps={{ min: 0, max: currentSale.total_amount }}
+                  inputProps={{
+                    min: 0,
+                    max: Math.min(currentSale.total_amount, MAX_NUMERIC_VALUE),
+                    maxLength: MAX_NUMERIC_DIGITS,
+                  }}
                   InputProps={{
                     startAdornment: <InputAdornment position="start"></InputAdornment>,
                   }}
                   helperText={currentSale.discount > currentSale.total_amount ? 'ส่วนลดไม่สามารถเกินยอดรวมได้' : ''}
                   error={currentSale.discount > currentSale.total_amount}
+                  sx={{
+                    '& .MuiInputBase-input': {
+                      color: 'error.main',
+                      fontWeight: 700,
+                    },
+                  }}
                 />
-
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                  <TextField
-                    fullWidth
-                    label={requiresCustomerName ? 'ชื่อลูกค้า / บริษัท' : 'ชื่อลูกค้า (ไม่บังคับ)'}
-                    type="text"
-                    size={isMobile ? 'small' : 'medium'}
-                    value={currentSale.customer_name || ''}
-                    onChange={(e) => setCurrentSale({
-                      ...currentSale,
-                      customer_id: null,
-                      customer_name: e.target.value,
-                      customer_phone: null,
-                      customer_address: null,
-                    })}
-                    required={requiresCustomerName}
-                    error={requiresCustomerName && !currentSale.customer_name?.trim()}
-                    helperText={requiresCustomerName && !currentSale.customer_name?.trim() ? 'จำเป็นสำหรับออกเอกสาร' : ''}
-                  />
-                  <Tooltip title="ค้นหาข้อมูลลูกค้า">
-                    <IconButton
-                      color="primary"
-                      aria-label="ค้นหาข้อมูลลูกค้า"
-                      onClick={() => setCustomerSearchOpen(true)}
-                      sx={{ mt: 0.5, border: '1px solid', borderColor: 'divider' }}
-                    >
-                      <SearchIcon />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-
-                <FormControl fullWidth size={isMobile ? 'small' : 'medium'}>
-                  <InputLabel>วิธีชำระและเอกสาร</InputLabel>
-                  <Select
-                    value={getSaleMethod(currentSale)}
-                    label="วิธีชำระและเอกสาร"
-                    onChange={(e) => {
-                      const method = e.target.value as SaleMethod;
-                      const isCredit = method === 'credit_invoice';
-                      setCurrentSale({
-                        ...currentSale,
-                        payment_type: isCredit ? 'credit' : 'cash',
-                        document_type: isCredit
-                          ? 'invoice'
-                          : method === 'cash_company_receipt'
-                            ? 'company_receipt'
-                            : 'sales_slip',
-                      });
-                      if (isCredit) {
-                        setAmountPaid(0);
-                      }
-                    }}
-                  >
-                    <MenuItem value="cash_slip">เงินสด — รับสลิป</MenuItem>
-                    <MenuItem value="credit_invoice">ลงบิล (เครดิต) — ออกใบแจ้งหนี้</MenuItem>
-                    <MenuItem value="cash_company_receipt">เงินสด — ออกใบเสร็จสำหรับบริษัท</MenuItem>
-                  </Select>
-                </FormControl>
 
                 {currentSale.payment_type === 'cash' && (
                   <TextField
                     label="รับเงินมา (บาท)"
                     type="text"
-                    size={isMobile ? 'small' : 'medium'}
+                    size="small"
                     value={amountPaid > 0 ? amountPaid.toString() : ''}
                     onChange={(e) => {
                       const value = e.target.value;
+                      if (!hasValidNumericLength(value)) return;
                       // Allow empty, numbers and one decimal point
                       if (value === '') {
                         setAmountPaid(0);
@@ -872,18 +1095,25 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                     InputProps={{
                       startAdornment: <InputAdornment position="start"></InputAdornment>,
                     }}
+                    inputProps={{ inputMode: 'decimal', maxLength: MAX_NUMERIC_DIGITS + 1 }}
                     required
                     helperText={amountPaid < currentSale.net_amount ? 'จำนวนเงินไม่เพียงพอ' : ''}
                     error={amountPaid > 0 && amountPaid < currentSale.net_amount}
+                    sx={{
+                      '& .MuiInputBase-input': {
+                        color: 'info.main',
+                        fontWeight: 700,
+                      },
+                    }}
                   />
                 )}
 
-                <Box sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Box sx={{ bgcolor: 'action.hover', p: 1.25, borderRadius: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                     <Typography>ยอดรวม:</Typography>
                     <Typography>{formatPrice(currentSale.total_amount)}</Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                     <Typography>ส่วนลด:</Typography>
                     <Typography color="error">-{formatPrice(currentSale.discount)}</Typography>
                   </Box>
@@ -916,7 +1146,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                 </Box>
 
                 {/* Action Buttons - Desktop Only */}
-                <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, mt: 2 }}>
+                <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, mt: 1 }}>
                   <Button
                     fullWidth
                     variant="outlined"
@@ -1071,7 +1301,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
         <DialogContent>
           <Typography>
             {(completedSale?.document_type || (completedSale?.payment_type === 'credit' ? 'invoice' : 'sales_slip')) === 'sales_slip'
-              ? 'ต้องการ Preview ใบเสร็จ 80 มม. ก่อนพิมพ์หรือไม่?'
+              ? 'ต้องการออกใบเสร็จหรือไม่?'
               : `ต้องการเปิด PDF ${completedSale
                 ? documentLabels[completedSale.document_type || (completedSale.payment_type === 'credit' ? 'invoice' : 'sales_slip')]
                 : 'เอกสาร'}หรือไม่?`}

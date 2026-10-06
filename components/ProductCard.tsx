@@ -9,6 +9,7 @@ import {
   Chip,
 } from '@mui/material';
 import { Product } from '@/types/product';
+import ProductThumbnail from '@/components/ProductThumbnail';
 
 interface ProductCardProps {
   product: Product;
@@ -35,7 +36,8 @@ export default function ProductCard({
   return (
     <Card elevation={1} sx={{ borderRadius: 1 }}>
       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+          <ProductThumbnail product={product} size={52} />
           <Box sx={{ flex: 1, mr: 1, minWidth: 0 }}>
             <Typography
               variant="body2"

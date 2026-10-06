@@ -16,6 +16,8 @@ package-lock.json
 
 # production
 /build
+/desktop-runtime/
+/dist-electron/
 
 # misc
 .DS_Store

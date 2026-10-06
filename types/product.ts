@@ -2,6 +2,8 @@ export interface Product {
   id?: string;
   ProductName: string;
   barcode?: string;
+  image_path?: string | null;
+  image_url?: string | null;
   SalePrice: number;
   Store1Name: string;
   Store1Price: number;

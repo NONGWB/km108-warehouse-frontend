@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'KM 108 Shop - ค้นหาและเปรียบเทียบราคา',
+  title: 'KM 108 Shop',
   description: 'ระบบค้นหาและจัดการสินค้า KM 108 Shop',
 };
 

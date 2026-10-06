@@ -2,10 +2,15 @@
   "name": "km108-warehouse-frontend",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "desktop:prepare": "node scripts/prepare-electron.cjs",
+    "desktop:preview": "npm run build && npm run desktop:prepare && electron .",
+    "desktop:build": "npm run build && npm run desktop:prepare && electron-builder --win nsis",
+    "desktop:dir": "npm run build && npm run desktop:prepare && electron-builder --win --dir",
     "lint": "next lint",
     "deploy": "npm run build && firebase deploy",
     "firebase:init": "firebase init"
@@ -28,9 +33,43 @@
     "@types/node": "^20",
     "@types/react": "^19.2.13",
     "@types/react-dom": "^19.2.3",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^8",
     "eslint-config-next": "^15.0.4",
     "tsx": "^4.21.0",
     "typescript": "^5"
+  },
+  "build": {
+    "appId": "com.km108.warehouse-pos",
+    "productName": "KM108 Warehouse POS",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop-runtime",
+        "to": "desktop-runtime"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KM108 Warehouse POS",
+      "artifactName": "KM108-Warehouse-POS-Setup-${version}.${ext}"
+    }
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readProducts, addProduct, updateProduct, deleteProduct } from '@/lib/db';
+import { getProductValidationError } from '@/lib/productValidation';
 
 export async function GET() {
   try {
@@ -13,6 +14,10 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const validationError = getProductValidationError(body);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
     const product = await addProduct(body);
     return NextResponse.json(product, { status: 201 });
   } catch (error) {
@@ -26,6 +31,10 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const { oldName, ...product } = body;
+    const validationError = getProductValidationError(product);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
     const updated = await updateProduct(oldName, product);
     
     if (!updated) {

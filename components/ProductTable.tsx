@@ -12,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Product } from '@/types/product';
+import ProductThumbnail from '@/components/ProductThumbnail';
 
 interface ProductTableProps {
   products: Product[];
@@ -65,13 +66,16 @@ export default function ProductTable({
               }}
             >
               <TableCell component="th" scope="row">
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                    {product.ProductName}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    บาร์โค้ด: {product.barcode || '-'}
-                  </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <ProductThumbnail product={product} size={48} />
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                      {product.ProductName}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      บาร์โค้ด: {product.barcode || '-'}
+                    </Typography>
+                  </Box>
                 </Box>
               </TableCell>
               <TableCell align="right" sx={{ fontWeight: 'bold', color: 'secondary.main' }}>

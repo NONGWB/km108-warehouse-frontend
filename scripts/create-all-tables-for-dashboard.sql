@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS products (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   product_name VARCHAR(255) NOT NULL,
   barcode VARCHAR(100),
+  image_path TEXT,
   sale_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
   store1_name VARCHAR(255) DEFAULT '',
   store1_price DECIMAL(10, 2) DEFAULT 0,
@@ -21,6 +22,8 @@ CREATE TABLE IF NOT EXISTS products (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_path TEXT;
+
 -- Create indexes for products
 CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
 CREATE INDEX IF NOT EXISTS idx_products_name ON products(product_name);
@@ -33,6 +36,37 @@ CREATE POLICY "Allow all operations on products" ON products
   FOR ALL
   USING (true)
   WITH CHECK (true);
+
+-- Optional product images (public until login/permissions are introduced)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'product-images',
+  'product-images',
+  TRUE,
+  2097152,
+  ARRAY['image/jpeg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+DROP POLICY IF EXISTS "Public can view product images" ON storage.objects;
+CREATE POLICY "Public can view product images" ON storage.objects
+  FOR SELECT USING (bucket_id = 'product-images');
+
+DROP POLICY IF EXISTS "Public can upload product images" ON storage.objects;
+CREATE POLICY "Public can upload product images" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'product-images');
+
+DROP POLICY IF EXISTS "Public can update product images" ON storage.objects;
+CREATE POLICY "Public can update product images" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'product-images')
+  WITH CHECK (bucket_id = 'product-images');
+
+DROP POLICY IF EXISTS "Public can delete product images" ON storage.objects;
+CREATE POLICY "Public can delete product images" ON storage.objects
+  FOR DELETE USING (bucket_id = 'product-images');
 
 -- ============================================
 -- 2. Create Contacts Table
@@ -122,7 +156,7 @@ CREATE TABLE IF NOT EXISTS sale_items (
   product_name VARCHAR(255) NOT NULL,
   barcode VARCHAR(100),
   unit_price DECIMAL(10, 2) NOT NULL,
-  quantity INTEGER NOT NULL DEFAULT 1,
+  quantity NUMERIC(10, 3) NOT NULL DEFAULT 1 CHECK (quantity > 0),
   total_price DECIMAL(10, 2) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );

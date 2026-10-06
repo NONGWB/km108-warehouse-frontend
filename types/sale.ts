@@ -5,7 +5,7 @@ export interface SaleItem {
   product_name: string;
   barcode?: string;
   unit_price: number; // ราคาที่ขาย ณ ตอนนั้น
-  quantity: number;
+  quantity: number; // รองรับจำนวนแบบชั่งน้ำหนัก สูงสุด 3 ตำแหน่งทศนิยม
   total_price: number;
   created_at?: string;
 }

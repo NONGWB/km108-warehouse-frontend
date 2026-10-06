@@ -6,6 +6,7 @@ interface ProductRow {
   id?: string;
   product_name: string;
   barcode?: string;
+  image_path?: string | null;
   sale_price: number;
   store1_name: string;
   store1_price: number;
@@ -39,10 +40,16 @@ function toRow(product: Product): ProductRow {
 
 // Convert ProductRow (snake_case) to Product (PascalCase)
 function toProduct(row: ProductRow): Product {
+  const imageUrl = row.image_path
+    ? supabase.storage.from('product-images').getPublicUrl(row.image_path).data.publicUrl
+    : null;
+
   return {
     id: row.id,
     ProductName: row.product_name,
     barcode: row.barcode,
+    image_path: row.image_path || null,
+    image_url: imageUrl,
     SalePrice: row.sale_price,
     Store1Name: row.store1_name,
     Store1Price: row.store1_price,
@@ -113,17 +120,42 @@ export async function updateProduct(
 }
 
 export async function deleteProduct(productName: string): Promise<boolean> {
+  const { data: product, error: findError } = await supabase
+    .from('products')
+    .select('id, image_path')
+    .eq('product_name', productName)
+    .maybeSingle();
+
+  if (findError) {
+    console.error('Error finding product before delete:', findError);
+    throw new Error(findError.message || 'Failed to find product');
+  }
+
+  if (!product) return false;
+
   const { error, count } = await supabase
     .from('products')
     .delete({ count: 'exact' })
-    .eq('product_name', productName);
+    .eq('id', product.id);
 
   if (error) {
     console.error('Error deleting product:', error);
     throw new Error(error.message || 'Failed to delete product');
   }
 
-  return (count || 0) > 0;
+  const deleted = (count || 0) > 0;
+
+  if (deleted && product.image_path) {
+    const { error: imageError } = await supabase.storage
+      .from('product-images')
+      .remove([product.image_path]);
+
+    if (imageError) {
+      console.warn('Product deleted, but its image could not be removed:', imageError);
+    }
+  }
+
+  return deleted;
 }
 
 export async function bulkInsertProducts(products: Product[]): Promise<number> {

@@ -32,11 +32,34 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DownloadIcon from '@mui/icons-material/Download';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
+import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { Product } from '@/types/product';
+import ProductThumbnail from '@/components/ProductThumbnail';
+import { prepareProductImage } from '@/lib/productImage';
+import {
+  PRODUCT_FIELD_MAX_LENGTHS,
+  PRODUCT_PRICE_MAX,
+  getProductValidationError,
+} from '@/lib/productValidation';
 
 interface ManageProductsProps {
   onProductsChange: () => void;
 }
+
+const MAX_NUMERIC_DIGITS = 10;
+
+const hasValidNumericLength = (value: string) => {
+  if (value === '') return true;
+  const numericValue = Number(value);
+  return (
+    (value.match(/\d/g) || []).length <= MAX_NUMERIC_DIGITS
+    && Number.isFinite(numericValue)
+    && numericValue >= 0
+    && numericValue <= PRODUCT_PRICE_MAX
+    && /^\d{0,8}(?:\.\d{0,2})?$/.test(value)
+  );
+};
 
 export default function ManageProducts({ onProductsChange }: ManageProductsProps) {
   const [products, setProducts] = useState<Product[]>([]);
@@ -52,6 +75,10 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{added: number; duplicates: number; duplicateNames: string[]} | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<Product>({
     ProductName: '',
     barcode: '',
@@ -91,6 +118,10 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
   useEffect(() => {
     fetchProducts();
   }, []);
+
+  useEffect(() => () => {
+    if (imagePreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(imagePreviewUrl);
+  }, [imagePreviewUrl]);
 
   useEffect(() => {
     // Filter products based on search query
@@ -158,6 +189,10 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
   };
 
   const handleOpenDialog = (product?: Product) => {
+    setImageFile(null);
+    setRemoveImage(false);
+    setImagePreviewUrl(product?.image_url || null);
+
     if (product) {
       setEditingProduct(product);
       setFormData({
@@ -195,14 +230,43 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingProduct(null);
+    setImageFile(null);
+    setImagePreviewUrl(null);
+    setRemoveImage(false);
+  };
+
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      showSnackbar('รองรับเฉพาะไฟล์ JPG, PNG และ WebP', 'error');
+      return;
+    }
+
+    setImageFile(file);
+    setRemoveImage(false);
+    setImagePreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreviewUrl(null);
+    setRemoveImage(Boolean(editingProduct?.image_path));
   };
 
   const handleInputChange = (field: keyof Product, value: string | number) => {
     const priceFields = ['SalePrice', 'Store1Price', 'Store2Price', 'Store3Price', 'Store4Price'];
-    const nameFields = ['ProductName', 'Store1Name', 'Store2Name', 'Store3Name', 'Store4Name'];
-    
     let processedValue = value;
+
+    if (typeof value === 'string' && field in PRODUCT_FIELD_MAX_LENGTHS) {
+      const maxLength = PRODUCT_FIELD_MAX_LENGTHS[field as keyof typeof PRODUCT_FIELD_MAX_LENGTHS];
+      processedValue = Array.from(value).slice(0, maxLength).join('');
+    }
+
     if (typeof value === 'string' && priceFields.includes(field)) {
+      if (!hasValidNumericLength(value)) return;
       processedValue = parseFloat(value) || 0;
     }
     
@@ -213,41 +277,72 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
   };
 
   const handleSubmit = async () => {
-    if (!formData.ProductName.trim()) {
-      showSnackbar('กรุณากรอกชื่อสินค้า', 'error');
+    const validationError = getProductValidationError(formData);
+    if (validationError) {
+      showSnackbar(validationError, 'error');
       return;
     }
 
     try {
-      if (editingProduct) {
-        const response = await fetch('/api/products', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ oldName: editingProduct.ProductName, ...formData }),
-        });
+      setSaving(true);
+      const response = await fetch('/api/products', {
+        method: editingProduct ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingProduct
+          ? { oldName: editingProduct.ProductName, ...formData }
+          : formData),
+      });
+      const savedProduct = await response.json() as Product & { error?: string };
 
-        if (!response.ok) throw new Error('Failed to update product');
-        showSnackbar('แก้ไขสินค้าสำเร็จ', 'success');
-      } else {
-        const response = await fetch('/api/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        });
+      if (!response.ok) {
+        throw new Error(savedProduct.error || (editingProduct ? 'Failed to update product' : 'Failed to add product'));
+      }
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to add product');
+      let imageWarning = '';
+      try {
+        if (imageFile) {
+          if (!savedProduct.id) throw new Error('ไม่พบรหัสสินค้า');
+          const preparedImage = await prepareProductImage(imageFile);
+          const imageFormData = new FormData();
+          imageFormData.append('product_id', savedProduct.id);
+          imageFormData.append('file', preparedImage);
+
+          const imageResponse = await fetch('/api/products/image', {
+            method: 'POST',
+            body: imageFormData,
+          });
+          if (!imageResponse.ok) {
+            const imageError = await imageResponse.json();
+            throw new Error(imageError.error || 'ไม่สามารถอัปโหลดรูปได้');
+          }
+        } else if (removeImage && savedProduct.id) {
+          const imageResponse = await fetch(
+            `/api/products/image?product_id=${encodeURIComponent(savedProduct.id)}`,
+            { method: 'DELETE' },
+          );
+          if (!imageResponse.ok) {
+            const imageError = await imageResponse.json();
+            throw new Error(imageError.error || 'ไม่สามารถลบรูปได้');
+          }
         }
-        showSnackbar('เพิ่มสินค้าสำเร็จ', 'success');
+      } catch (imageError) {
+        imageWarning = imageError instanceof Error ? imageError.message : 'ไม่สามารถบันทึกรูปสินค้าได้';
       }
 
       handleCloseDialog();
       await fetchProducts();
       onProductsChange();
+      showSnackbar(
+        imageWarning
+          ? `บันทึกสินค้าแล้ว แต่รูปสินค้าไม่สำเร็จ: ${imageWarning}`
+          : editingProduct ? 'แก้ไขสินค้าสำเร็จ' : 'เพิ่มสินค้าสำเร็จ',
+        imageWarning ? 'error' : 'success',
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
       showSnackbar(message, 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -479,7 +574,10 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                   }}
                 >
                   <TableCell component="th" scope="row">
-                    {product.ProductName}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <ProductThumbnail product={product} size={44} />
+                      <Typography variant="body2" fontWeight={600}>{product.ProductName}</Typography>
+                    </Box>
                   </TableCell>
                   <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                     {product.barcode || '-'}
@@ -596,6 +694,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                       label="ชื่อสินค้า"
                       value={formData.ProductName}
                       onChange={(e) => handleInputChange('ProductName', e.target.value)}
+                      inputProps={{ maxLength: PRODUCT_FIELD_MAX_LENGTHS.ProductName }}
                       required
                       size="small"
                     />
@@ -605,7 +704,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                       type="number"
                       value={formData.SalePrice || ''}
                       onChange={(e) => handleInputChange('SalePrice', e.target.value)}
-                      inputProps={{ min: 0, step: 0.01 }}
+                      inputProps={{ min: 0, max: PRODUCT_PRICE_MAX, step: 0.01, maxLength: MAX_NUMERIC_DIGITS }}
                       size="small"
                     />
                   </Box>
@@ -614,9 +713,49 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                     label="บาร์โค้ด (ไม่บังคับ)"
                     value={formData.barcode || ''}
                     onChange={(e) => handleInputChange('barcode', e.target.value)}
+                    inputProps={{ maxLength: PRODUCT_FIELD_MAX_LENGTHS.barcode }}
                     placeholder="เช่น 8851234567890"
                     size="small"
                   />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
+                    <ProductThumbnail
+                      product={{
+                        ProductName: formData.ProductName || 'รูปสินค้า',
+                        image_url: imagePreviewUrl,
+                      }}
+                      size={88}
+                      borderRadius={2}
+                    />
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.75 }}>
+                      <Button
+                        component="label"
+                        variant="outlined"
+                        size="small"
+                        startIcon={<AddPhotoAlternateIcon />}
+                      >
+                        {imagePreviewUrl ? 'เปลี่ยนรูป' : 'เลือกรูปสินค้า'}
+                        <input
+                          hidden
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={handleImageChange}
+                        />
+                      </Button>
+                      {imagePreviewUrl && (
+                        <Button
+                          color="error"
+                          size="small"
+                          startIcon={<DeleteOutlineIcon />}
+                          onClick={handleRemoveImage}
+                        >
+                          ลบรูป
+                        </Button>
+                      )}
+                      <Typography variant="caption" color="text.secondary">
+                        ไม่บังคับ · ระบบจะย่อเป็น WebP ไม่เกิน 512 px
+                      </Typography>
+                    </Box>
+                  </Box>
                 </Box>
               </CardContent>
             </Card>
@@ -634,6 +773,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                       label="ร้านที่ 1"
                       value={formData.Store1Name}
                       onChange={(e) => handleInputChange('Store1Name', e.target.value)}
+                      inputProps={{ maxLength: PRODUCT_FIELD_MAX_LENGTHS.Store1Name }}
                       placeholder="ชื่อร้าน"
                       size="small"
                     />
@@ -643,7 +783,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                       type="number"
                       value={formData.Store1Price || ''}
                       onChange={(e) => handleInputChange('Store1Price', e.target.value)}
-                      inputProps={{ min: 0, step: 0.01 }}
+                      inputProps={{ min: 0, max: PRODUCT_PRICE_MAX, step: 0.01, maxLength: MAX_NUMERIC_DIGITS }}
                       size="small"
                     />
                   </Box>
@@ -653,6 +793,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                       label="ร้านที่ 2"
                       value={formData.Store2Name}
                       onChange={(e) => handleInputChange('Store2Name', e.target.value)}
+                      inputProps={{ maxLength: PRODUCT_FIELD_MAX_LENGTHS.Store2Name }}
                       placeholder="ชื่อร้าน"
                       size="small"
                     />
@@ -662,7 +803,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                       type="number"
                       value={formData.Store2Price || ''}
                       onChange={(e) => handleInputChange('Store2Price', e.target.value)}
-                      inputProps={{ min: 0, step: 0.01 }}
+                      inputProps={{ min: 0, max: PRODUCT_PRICE_MAX, step: 0.01, maxLength: MAX_NUMERIC_DIGITS }}
                       size="small"
                     />
                   </Box>
@@ -672,6 +813,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                       label="ร้านที่ 3"
                       value={formData.Store3Name}
                       onChange={(e) => handleInputChange('Store3Name', e.target.value)}
+                      inputProps={{ maxLength: PRODUCT_FIELD_MAX_LENGTHS.Store3Name }}
                       placeholder="ชื่อร้าน"
                       size="small"
                     />
@@ -681,7 +823,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                       type="number"
                       value={formData.Store3Price || ''}
                       onChange={(e) => handleInputChange('Store3Price', e.target.value)}
-                      inputProps={{ min: 0, step: 0.01 }}
+                      inputProps={{ min: 0, max: PRODUCT_PRICE_MAX, step: 0.01, maxLength: MAX_NUMERIC_DIGITS }}
                       size="small"
                     />
                   </Box>
@@ -691,6 +833,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                       label="ร้านที่ 4"
                       value={formData.Store4Name}
                       onChange={(e) => handleInputChange('Store4Name', e.target.value)}
+                      inputProps={{ maxLength: PRODUCT_FIELD_MAX_LENGTHS.Store4Name }}
                       placeholder="ชื่อร้าน"
                       size="small"
                     />
@@ -700,7 +843,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                       type="number"
                       value={formData.Store4Price || ''}
                       onChange={(e) => handleInputChange('Store4Price', e.target.value)}
-                      inputProps={{ min: 0, step: 0.01 }}
+                      inputProps={{ min: 0, max: PRODUCT_PRICE_MAX, step: 0.01, maxLength: MAX_NUMERIC_DIGITS }}
                       size="small"
                     />
                   </Box>
@@ -729,8 +872,9 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
             variant="contained" 
             color="primary"
             size="small"
+            disabled={saving}
           >
-            {editingProduct ? 'บันทึก' : 'เพิ่ม'}
+            {saving ? 'กำลังบันทึก...' : editingProduct ? 'บันทึก' : 'เพิ่ม'}
           </Button>
         </DialogActions>
       </Dialog>
