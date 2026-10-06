@@ -169,6 +169,7 @@ export function buildSaleA4Document(sale: Sale): TDocumentDefinitions {
                 body: [
                   [{ text: 'เลขที่เอกสาร', color: '#71717a' }, { text: documentNumber, alignment: 'right', bold: true }],
                   [{ text: 'วันที่ออกเอกสาร', color: '#71717a' }, { text: formatThaiDate(sale.sale_date), alignment: 'right' }],
+                  [{ text: 'ผู้ขาย', color: '#71717a' }, { text: sale.seller_name || '-', alignment: 'right' }],
                   [{ text: 'วิธีชำระ', color: '#71717a' }, { text: isInvoice ? 'เครดิต' : 'เงินสด', alignment: 'right' }],
                 ],
               },
@@ -361,6 +362,7 @@ export function buildSale80mmDocument(sale: Sale): TDocumentDefinitions {
           body: [
             ['เลขที่', { text: documentNumber, alignment: 'right', bold: true }],
             ['วันที่', { text: formatThaiDateTime(transactionDate), alignment: 'right' }],
+            ['ผู้ขาย', { text: sale.seller_name || '-', alignment: 'right' }],
             ['ลูกค้า', { text: sale.customer_name || 'ลูกค้าทั่วไป', alignment: 'right' }],
             ['ชำระโดย', { text: sale.payment_type === 'cash' ? 'เงินสด' : 'เครดิต', alignment: 'right' }],
           ],
@@ -422,19 +424,10 @@ async function loadPdfMake() {
   return pdfMake;
 }
 
-export async function openSaleA4Pdf(sale: Sale) {
-  const previewWindow = window.open('', '_blank');
-  if (!previewWindow) {
-    throw new Error('Popup was blocked');
-  }
-
-  try {
-    const pdfMake = await loadPdfMake();
-    await pdfMake.createPdf(buildSaleA4Document(sale)).open(previewWindow);
-  } catch (error) {
-    previewWindow.close();
-    throw error;
-  }
+export async function createSaleA4PdfPreviewUrl(sale: Sale) {
+  const pdfMake = await loadPdfMake();
+  const blob = await pdfMake.createPdf(buildSaleA4Document(sale)).getBlob();
+  return URL.createObjectURL(blob);
 }
 
 export async function createSale80mmPdfPreviewUrl(sale: Sale) {

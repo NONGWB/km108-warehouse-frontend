@@ -13,6 +13,8 @@ export interface SaleItem {
 export interface Sale {
   id?: string;
   document_number?: string | null;
+  seller_id?: string | null;
+  seller_name?: string | null;
   sale_date: string;
   customer_id?: string | null;
   customer_name?: string; // ชื่อลูกค้า (required สำหรับ credit)

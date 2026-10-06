@@ -58,9 +58,11 @@ import { getCustomerDisplayName } from '@/types/customer';
 import ProductThumbnail from '@/components/ProductThumbnail';
 import {
   createSale80mmPdfPreviewUrl,
-  openSaleA4Pdf,
   printSale80mmPdf,
 } from '@/lib/salePdf';
+import SaleA4PreviewDialog from '@/components/SaleA4PreviewDialog';
+import { useAuth } from '@/contexts/AuthContext';
+import { isManagerRole } from '@/types/auth';
 
 interface ManageSalesProps {
   onSalesChange: () => void;
@@ -155,6 +157,8 @@ function QuantityInput({ value, onChange }: QuantityInputProps) {
 }
 
 export default function ManageSales({ onSalesChange }: ManageSalesProps) {
+  const { profile } = useAuth();
+  const canDeletePersistedSales = Boolean(profile && isManagerRole(profile.role));
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -189,6 +193,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
   const [confirmDialog, setConfirmDialog] = useState(false);
   const [printDialog, setPrintDialog] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+  const [a4PreviewSale, setA4PreviewSale] = useState<Sale | null>(null);
   const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
   const [receiptPreviewLoading, setReceiptPreviewLoading] = useState(false);
@@ -492,10 +497,8 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
 
     try {
       if (isFormalDocument) {
-        await openSaleA4Pdf(completedSale);
         setPrintDialog(false);
-        setCompletedSale(null);
-        resetForm();
+        setA4PreviewSale(completedSale);
       } else {
         setPrintDialog(false);
         setReceiptPreviewOpen(true);
@@ -537,6 +540,12 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
 
   const handleSkipPrint = () => {
     setPrintDialog(false);
+    setCompletedSale(null);
+    resetForm();
+  };
+
+  const handleCloseA4Preview = () => {
+    setA4PreviewSale(null);
     setCompletedSale(null);
     resetForm();
   };
@@ -1302,7 +1311,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
           <Typography>
             {(completedSale?.document_type || (completedSale?.payment_type === 'credit' ? 'invoice' : 'sales_slip')) === 'sales_slip'
               ? 'ต้องการออกใบเสร็จหรือไม่?'
-              : `ต้องการเปิด PDF ${completedSale
+              : `ต้องการ Preview PDF ${completedSale
                 ? documentLabels[completedSale.document_type || (completedSale.payment_type === 'credit' ? 'invoice' : 'sales_slip')]
                 : 'เอกสาร'}หรือไม่?`}
           </Typography>
@@ -1316,7 +1325,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
           >
             {(completedSale?.document_type || (completedSale?.payment_type === 'credit' ? 'invoice' : 'sales_slip')) === 'sales_slip'
               ? 'Preview และพิมพ์'
-              : `เปิด PDF ${completedSale
+              : `Preview PDF ${completedSale
                 ? documentLabels[completedSale.document_type || (completedSale.payment_type === 'credit' ? 'invoice' : 'sales_slip')]
                 : 'เอกสาร'}`}
           </Button>
@@ -1324,6 +1333,8 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
       </Dialog>
 
       {/* 80 mm Receipt Preview */}
+      <SaleA4PreviewDialog sale={a4PreviewSale} onClose={handleCloseA4Preview} />
+
       <Dialog
         open={receiptPreviewOpen}
         onClose={handleCloseReceiptPreview}
@@ -1417,13 +1428,13 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
                         >
                           โหลด
                         </Button>
-                        <IconButton
+                        {canDeletePersistedSales && <IconButton
                           size="small"
                           color="error"
                           onClick={() => sale.id && deleteDraft(sale.id)}
                         >
                           <DeleteIcon />
-                        </IconButton>
+                        </IconButton>}
                       </TableCell>
                     </TableRow>
                   ))}

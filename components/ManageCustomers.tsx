@@ -36,6 +36,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import type { Customer, CustomerType } from '@/types/customer';
 import { getCustomerDisplayName } from '@/types/customer';
+import { useAuth } from '@/contexts/AuthContext';
+import { isManagerRole } from '@/types/auth';
 
 const emptyForm = {
   customer_type: 'individual' as CustomerType,
@@ -46,6 +48,8 @@ const emptyForm = {
 };
 
 export default function ManageCustomers() {
+  const { profile } = useAuth();
+  const canDelete = Boolean(profile && isManagerRole(profile.role));
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -204,7 +208,7 @@ export default function ManageCustomers() {
                   <TableCell>{customer.phone || '-'}</TableCell>
                   <TableCell align="center">
                     <IconButton size="small" color="primary" onClick={() => openForm(customer)}><EditIcon /></IconButton>
-                    <IconButton size="small" color="error" onClick={() => setCustomerToDelete(customer)}><DeleteIcon /></IconButton>
+                    {canDelete && <IconButton size="small" color="error" onClick={() => setCustomerToDelete(customer)}><DeleteIcon /></IconButton>}
                   </TableCell>
                 </TableRow>
               ))}
@@ -271,7 +275,7 @@ export default function ManageCustomers() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={Boolean(customerToDelete)} onClose={() => setCustomerToDelete(null)}>
+      <Dialog open={canDelete && Boolean(customerToDelete)} onClose={() => setCustomerToDelete(null)}>
         <DialogTitle>ยืนยันการลบ</DialogTitle>
         <DialogContent>
           ต้องการลบ “{customerToDelete ? getCustomerDisplayName(customerToDelete) : ''}” หรือไม่?

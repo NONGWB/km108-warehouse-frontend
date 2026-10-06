@@ -42,6 +42,8 @@ import {
   PRODUCT_PRICE_MAX,
   getProductValidationError,
 } from '@/lib/productValidation';
+import { useAuth } from '@/contexts/AuthContext';
+import { isManagerRole } from '@/types/auth';
 
 interface ManageProductsProps {
   onProductsChange: () => void;
@@ -62,6 +64,8 @@ const hasValidNumericLength = (value: string) => {
 };
 
 export default function ManageProducts({ onProductsChange }: ManageProductsProps) {
+  const { profile } = useAuth();
+  const canDelete = Boolean(profile && isManagerRole(profile.role));
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
@@ -624,13 +628,13 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                     </Box>
                   </TableCell>
                   <TableCell align="center">
-                    <IconButton
+                    {canDelete && <IconButton
                       color="primary"
                       onClick={() => handleOpenDialog(product)}
                       size="small"
                     >
                       <EditIcon />
-                    </IconButton>
+                    </IconButton>}
                     <IconButton
                       color="error"
                       onClick={() => handleDelete(product.ProductName)}
@@ -741,7 +745,7 @@ export default function ManageProducts({ onProductsChange }: ManageProductsProps
                           onChange={handleImageChange}
                         />
                       </Button>
-                      {imagePreviewUrl && (
+                      {canDelete && imagePreviewUrl && (
                         <Button
                           color="error"
                           size="small"

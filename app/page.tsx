@@ -23,13 +23,19 @@ import ManageCustomers from '@/components/ManageCustomers';
 import ManageSales from '@/components/ManageSales';
 import InvoiceHistory from '@/components/InvoiceHistory';
 import NavBar from '@/components/NavBar';
+import LoginPage from '@/components/LoginPage';
+import ProfileDialog from '@/components/ProfileDialog';
+import ManageUsers from '@/components/ManageUsers';
 import SearchBar from '@/components/SearchBar';
 import ProductCard from '@/components/ProductCard';
 import ProductTable from '@/components/ProductTable';
 import PriceComparisonFab from '@/components/PriceComparisonFab';
 import { createAppTheme } from '@/theme';
+import { useAuth } from '@/contexts/AuthContext';
+import { getAllowedTabIds } from '@/config/menu';
 
 export default function Home() {
+  const { profile, loading: authLoading, logout } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
@@ -43,6 +49,11 @@ export default function Home() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
   const [mounted, setMounted] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const allowedTabIds = useMemo(
+    () => profile ? getAllowedTabIds(profile.role) : new Set<number>(),
+    [profile?.role],
+  );
   const theme = useMemo(() => createAppTheme(themeMode), [themeMode]);
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'), { noSsr: true });
@@ -59,7 +70,7 @@ export default function Home() {
     const savedTab = localStorage.getItem('currentTab');
     if (savedTab !== null) {
       const tabIndex = parseInt(savedTab, 10);
-      if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex <= 7) {
+      if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex <= 8) {
         setTabValue(tabIndex);
       }
     }
@@ -73,6 +84,12 @@ export default function Home() {
     }
   }, [tabValue, mounted]);
 
+  useEffect(() => {
+    if (profile && !allowedTabIds.has(tabValue)) {
+      setTabValue(0);
+    }
+  }, [profile, tabValue, allowedTabIds]);
+
   // Helper function to safely format price with number formatting
   const formatPrice = (price: any): string => {
     if (price === null || price === undefined || price === '') return '-';
@@ -81,6 +98,7 @@ export default function Home() {
   };
 
   const fetchProducts = async () => {
+    if (!profile) return;
     try {
       setLoading(true);
       const response = await fetch('/api/products');
@@ -98,8 +116,8 @@ export default function Home() {
   };
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    if (profile) fetchProducts();
+  }, [profile]);
 
   useEffect(() => {
     const filtered = products.filter(product =>
@@ -196,6 +214,24 @@ export default function Home() {
     return null;
   }
 
+  if (authLoading) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}><CircularProgress /></Box>
+      </ThemeProvider>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <LoginPage />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -207,6 +243,9 @@ export default function Home() {
         onMenuSelect={handleMenuSelect}
         themeMode={themeMode}
         onThemeToggle={handleThemeToggle}
+        profile={profile}
+        onOpenProfile={() => setProfileOpen(true)}
+        onLogout={logout}
       />
 
       {/* Toolbar spacer for fixed AppBar */}
@@ -221,11 +260,11 @@ export default function Home() {
           <Dashboard />
         )}
         
-        {tabValue === 1 && (
+        {allowedTabIds.has(1) && tabValue === 1 && (
           <ManageSales onSalesChange={fetchProducts} />
         )}
 
-        {tabValue === 7 && (
+        {allowedTabIds.has(7) && tabValue === 7 && (
           <InvoiceHistory />
         )}
         
@@ -290,22 +329,28 @@ export default function Home() {
           </Box>
         )}
 
-        {tabValue === 3 && (
+        {allowedTabIds.has(3) && tabValue === 3 && (
           <ManageProducts onProductsChange={fetchProducts} />
         )}
 
-        {tabValue === 4 && (
+        {allowedTabIds.has(4) && tabValue === 4 && (
           <ManageOrderNotes />
         )}
 
-        {tabValue === 5 && (
+        {allowedTabIds.has(5) && tabValue === 5 && (
           <ManageContacts />
         )}
 
-        {tabValue === 6 && (
+        {allowedTabIds.has(6) && tabValue === 6 && (
           <ManageCustomers />
         )}
+
+        {allowedTabIds.has(8) && tabValue === 8 && (
+          <ManageUsers />
+        )}
       </Container>
+
+      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
 
       {/* Floating Action Button for mobile price comparison toggle */}
       {isMobile && tabValue === 2 && !loading && filteredProducts.length > 0 && (

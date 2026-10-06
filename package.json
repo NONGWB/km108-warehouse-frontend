@@ -7,6 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "auth:create-admin": "node --env-file=.env.local scripts/create-first-admin.mjs",
     "desktop:prepare": "node scripts/prepare-electron.cjs",
     "desktop:preview": "npm run build && npm run desktop:prepare && electron .",
     "desktop:build": "npm run build && npm run desktop:prepare && electron-builder --win nsis",
@@ -20,6 +21,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.5",
     "@mui/material": "^7.3.5",
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.87.1",
     "@types/pdfmake": "^0.3.3",
     "googleapis": "^166.0.0",
@@ -37,6 +39,7 @@
     "electron-builder": "^26.15.3",
     "eslint": "^8",
     "eslint-config-next": "^15.0.4",
+    "supabase": "^2.119.0",
     "tsx": "^4.21.0",
     "typescript": "^5"
   },

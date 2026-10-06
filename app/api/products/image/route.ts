@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { authorizeApiRequest, MANAGER_ROLES } from '@/lib/apiAuth';
 
 const BUCKET_NAME = 'product-images';
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
@@ -12,7 +13,7 @@ function getExtension(contentType: string) {
   return 'jpg';
 }
 
-async function findProduct(productId: string) {
+async function findProduct(supabase: SupabaseClient, productId: string) {
   return supabase
     .from('products')
     .select('id, image_path')
@@ -21,6 +22,9 @@ async function findProduct(productId: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   let uploadedPath: string | null = null;
 
   try {
@@ -40,7 +44,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'รูปสินค้าต้องมีขนาดไม่เกิน 2 MB' }, { status: 400 });
     }
 
-    const { data: product, error: findError } = await findProduct(productId);
+    const { data: product, error: findError } = await findProduct(supabase, productId);
     if (findError || !product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
@@ -88,13 +92,16 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const auth = await authorizeApiRequest(MANAGER_ROLES);
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const productId = request.nextUrl.searchParams.get('product_id')?.trim();
     if (!productId) {
       return NextResponse.json({ error: 'product_id is required' }, { status: 400 });
     }
 
-    const { data: product, error: findError } = await findProduct(productId);
+    const { data: product, error: findError } = await findProduct(supabase, productId);
     if (findError || !product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }

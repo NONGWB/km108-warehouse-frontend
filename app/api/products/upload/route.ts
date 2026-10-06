@@ -3,8 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import Papa from 'papaparse';
 import { Product } from '@/types/product';
 import { readProducts, bulkInsertProducts } from '@/lib/db';
+import { authorizeApiRequest } from '@/lib/apiAuth';
 
 export async function POST(request: NextRequest) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -48,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get existing products
-    const existingProducts = await readProducts();
+    const existingProducts = await readProducts(auth.supabase);
     const existingNames = new Set(existingProducts.map(p => p.ProductName));
 
     // Separate new and duplicate products
@@ -80,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     // Add new products to database
     if (newProducts.length > 0) {
-      await bulkInsertProducts(newProducts);
+      await bulkInsertProducts(auth.supabase, newProducts);
     }
 
     return NextResponse.json({

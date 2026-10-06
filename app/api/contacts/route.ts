@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { authorizeApiRequest, MANAGER_ROLES } from '@/lib/apiAuth';
 
 // GET all contacts
 export async function GET(request: Request) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
@@ -30,6 +33,9 @@ export async function GET(request: Request) {
 
 // POST create new contact
 export async function POST(request: Request) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const body = await request.json();
     const { name, phone, line_id, note } = body;
@@ -51,6 +57,9 @@ export async function POST(request: Request) {
 
 // PUT update contact
 export async function PUT(request: Request) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const body = await request.json();
     const { id, name, phone, line_id, note } = body;
@@ -73,6 +82,9 @@ export async function PUT(request: Request) {
 
 // DELETE contact
 export async function DELETE(request: Request) {
+  const auth = await authorizeApiRequest(MANAGER_ROLES);
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

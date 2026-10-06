@@ -11,6 +11,9 @@ import {
   Button,
   Tooltip,
   Collapse,
+  Avatar,
+  Divider,
+  ListItemIcon,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
@@ -18,8 +21,11 @@ import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
+import LogoutIcon from '@mui/icons-material/Logout';
 import { MouseEvent, useState } from 'react';
-import { menuItems, backOfficeMenuItems, appConfig } from '@/config/menu';
+import { appConfig, getBackOfficeMenuItemsForRole, getMenuItemsForRole } from '@/config/menu';
+import type { AppProfile } from '@/types/auth';
 
 interface NavBarProps {
   tabValue: number;
@@ -29,6 +35,9 @@ interface NavBarProps {
   onMenuSelect: (index: number) => void;
   themeMode: 'light' | 'dark';
   onThemeToggle: () => void;
+  profile: AppProfile;
+  onOpenProfile: () => void;
+  onLogout: () => void;
 }
 
 export default function NavBar({
@@ -39,10 +48,17 @@ export default function NavBar({
   onMenuSelect,
   themeMode,
   onThemeToggle,
+  profile,
+  onOpenProfile,
+  onLogout,
 }: NavBarProps) {
   const [backOfficeAnchorEl, setBackOfficeAnchorEl] = useState<HTMLElement | null>(null);
   const [mobileBackOfficeOpen, setMobileBackOfficeOpen] = useState(false);
-  const isBackOfficeActive = backOfficeMenuItems.some((item) => item.id === tabValue);
+  const [accountAnchorEl, setAccountAnchorEl] = useState<HTMLElement | null>(null);
+  const visibleMenuItems = getMenuItemsForRole(profile.role);
+  const visibleBackOfficeItems = getBackOfficeMenuItemsForRole(profile.role);
+  const hasBackOfficeItems = visibleBackOfficeItems.length > 0;
+  const isBackOfficeActive = visibleBackOfficeItems.some((item) => item.id === tabValue);
 
   const handleBackOfficeSelect = (id: number) => {
     setBackOfficeAnchorEl(null);
@@ -53,6 +69,18 @@ export default function NavBar({
   const handleMobileMenuClose = () => {
     setMobileBackOfficeOpen(false);
     onMenuClose();
+  };
+
+  const openProfile = () => {
+    setAccountAnchorEl(null);
+    onMenuClose();
+    onOpenProfile();
+  };
+
+  const logout = () => {
+    setAccountAnchorEl(null);
+    onMenuClose();
+    onLogout();
   };
 
   return (
@@ -68,7 +96,7 @@ export default function NavBar({
         
         {/* Desktop Menu */}
         <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1 }}>
-          {menuItems.map((item) => (
+          {visibleMenuItems.map((item) => (
             <Button
               key={item.id}
               color="inherit"
@@ -83,7 +111,7 @@ export default function NavBar({
               {item.label}
             </Button>
           ))}
-          <Button
+          {hasBackOfficeItems && <Button
             color="inherit"
             endIcon={<KeyboardArrowDownIcon />}
             onClick={(event) => setBackOfficeAnchorEl(event.currentTarget)}
@@ -97,15 +125,15 @@ export default function NavBar({
             }}
           >
             จัดการหลังร้าน
-          </Button>
-          <Menu
+          </Button>}
+          {hasBackOfficeItems && <Menu
             anchorEl={backOfficeAnchorEl}
             open={Boolean(backOfficeAnchorEl)}
             onClose={() => setBackOfficeAnchorEl(null)}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           >
-            {backOfficeMenuItems.map((item) => (
+            {visibleBackOfficeItems.map((item) => (
               <MenuItem
                 key={item.id}
                 selected={tabValue === item.id}
@@ -114,7 +142,7 @@ export default function NavBar({
                 {item.label}
               </MenuItem>
             ))}
-          </Menu>
+          </Menu>}
         </Box>
 
         <Tooltip title={themeMode === 'light' ? 'เปลี่ยนเป็นโหมดมืด' : 'เปลี่ยนเป็นโหมดสว่าง'}>
@@ -127,6 +155,32 @@ export default function NavBar({
             {themeMode === 'light' ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
           </IconButton>
         </Tooltip>
+
+        <Tooltip title={profile.name}>
+          <Button
+            color="inherit"
+            onClick={(event) => setAccountAnchorEl(event.currentTarget)}
+            sx={{ ml: 0.5, minWidth: 0, gap: 1, display: { xs: 'none', md: 'flex' } }}
+          >
+            <Avatar src={profile.avatar_url || undefined} sx={{ width: 30, height: 30, fontSize: 14 }}>
+              {profile.name.slice(0, 1)}
+            </Avatar>
+            <Typography variant="body2" sx={{ maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis' }} noWrap>
+              {profile.name}
+            </Typography>
+          </Button>
+        </Tooltip>
+        <Menu anchorEl={accountAnchorEl} open={Boolean(accountAnchorEl)} onClose={() => setAccountAnchorEl(null)}>
+          <MenuItem onClick={openProfile}>
+            <ListItemIcon><AccountCircleOutlinedIcon fontSize="small" /></ListItemIcon>
+            ข้อมูลส่วนตัว
+          </MenuItem>
+          <Divider />
+          <MenuItem onClick={logout}>
+            <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
+            ออกจากระบบ
+          </MenuItem>
+        </Menu>
 
         {/* Mobile Menu */}
         <Box sx={{ display: { xs: 'flex', md: 'none' } }}>
@@ -150,7 +204,7 @@ export default function NavBar({
               horizontal: 'right',
             }}
           >
-            {menuItems.map((item) => (
+            {visibleMenuItems.map((item) => (
               <MenuItem
                 key={item.id}
                 onClick={() => onMenuSelect(item.id)}
@@ -159,7 +213,7 @@ export default function NavBar({
                 {item.label}
               </MenuItem>
             ))}
-            <MenuItem
+            {hasBackOfficeItems && <MenuItem
               onClick={() => setMobileBackOfficeOpen((open) => !open)}
               selected={isBackOfficeActive}
               sx={{ fontWeight: 600 }}
@@ -168,9 +222,9 @@ export default function NavBar({
                 จัดการหลังร้าน
               </Box>
               {mobileBackOfficeOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </MenuItem>
-            <Collapse in={mobileBackOfficeOpen} timeout="auto" unmountOnExit>
-              {backOfficeMenuItems.map((item) => (
+            </MenuItem>}
+            {hasBackOfficeItems && <Collapse in={mobileBackOfficeOpen} timeout="auto" unmountOnExit>
+              {visibleBackOfficeItems.map((item) => (
                 <MenuItem
                   key={item.id}
                   selected={tabValue === item.id}
@@ -180,7 +234,16 @@ export default function NavBar({
                   {item.label}
                 </MenuItem>
               ))}
-            </Collapse>
+            </Collapse>}
+            <Divider />
+            <MenuItem onClick={openProfile}>
+              <ListItemIcon><AccountCircleOutlinedIcon fontSize="small" /></ListItemIcon>
+              ข้อมูลส่วนตัว
+            </MenuItem>
+            <MenuItem onClick={logout}>
+              <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
+              ออกจากระบบ
+            </MenuItem>
           </Menu>
         </Box>
       </Toolbar>

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { authorizeApiRequest, MANAGER_ROLES } from '@/lib/apiAuth';
 
 type PaymentType = 'cash' | 'credit';
 type DocumentType = 'sales_slip' | 'invoice' | 'company_receipt';
@@ -36,6 +36,9 @@ function isValidSaleMethod(paymentType: PaymentType, documentType: DocumentType)
 
 // GET all sales with items
 export async function GET(request: Request) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status'); // filter by status (draft/completed)
@@ -71,6 +74,8 @@ export async function GET(request: Request) {
     const transformedSales = sales?.map(sale => ({
       id: sale.id,
       document_number: sale.document_number,
+      seller_id: sale.seller_id,
+      seller_name: sale.seller_name,
       sale_date: sale.sale_date,
       total_amount: sale.total_amount,
       discount: sale.discount,
@@ -100,6 +105,9 @@ export async function GET(request: Request) {
 
 // POST create new sale with items
 export async function POST(request: Request) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const body = await request.json();
     const { sale_date, customer_id, customer_name, customer_phone, customer_address, total_amount, discount, net_amount, payment_type, document_type, amount_paid, change_amount, status, items } = body;
@@ -123,6 +131,8 @@ export async function POST(request: Request) {
         customer_name: customer_name?.trim() || null,
         customer_phone: customer_phone?.trim() || null,
         customer_address: customer_address?.trim() || null,
+        seller_id: auth.user.id,
+        seller_name: auth.profile.name,
         total_amount, 
         discount, 
         net_amount, 
@@ -180,6 +190,9 @@ export async function POST(request: Request) {
 
 // PUT update sale with items
 export async function PUT(request: Request) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const body = await request.json();
     const { id, sale_date, customer_id, customer_name, customer_phone, customer_address, total_amount, discount, net_amount, payment_type, document_type, amount_paid, change_amount, status, items } = body;
@@ -203,6 +216,8 @@ export async function PUT(request: Request) {
         customer_name: customer_name?.trim() || null,
         customer_phone: customer_phone?.trim() || null,
         customer_address: customer_address?.trim() || null,
+        seller_id: auth.user.id,
+        seller_name: auth.profile.name,
         total_amount, 
         discount, 
         net_amount, 
@@ -267,6 +282,9 @@ export async function PUT(request: Request) {
 
 // PATCH update invoice payment status without replacing sale items
 export async function PATCH(request: Request) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const body = await request.json();
     const { id, payment_status } = body as {
@@ -320,6 +338,9 @@ export async function PATCH(request: Request) {
 
 // DELETE sale (items will cascade delete)
 export async function DELETE(request: Request) {
+  const auth = await authorizeApiRequest(MANAGER_ROLES);
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

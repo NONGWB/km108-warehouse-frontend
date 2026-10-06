@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { authorizeApiRequest } from '@/lib/apiAuth';
 
 export async function GET() {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     // Get current date in local timezone (YYYY-MM-DD format)
     const now = new Date();

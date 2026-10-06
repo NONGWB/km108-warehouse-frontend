@@ -36,7 +36,7 @@ import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import type { Sale } from '@/types/sale';
-import { openSaleA4Pdf } from '@/lib/salePdf';
+import SaleA4PreviewDialog from '@/components/SaleA4PreviewDialog';
 
 type PaymentFilter = 'all' | 'unpaid' | 'paid';
 
@@ -65,6 +65,7 @@ export default function InvoiceHistory() {
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [selectedInvoice, setSelectedInvoice] = useState<Sale | null>(null);
   const [invoiceToPay, setInvoiceToPay] = useState<Sale | null>(null);
+  const [pdfInvoice, setPdfInvoice] = useState<Sale | null>(null);
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -117,14 +118,7 @@ export default function InvoiceHistory() {
     [invoices]
   );
 
-  const handleOpenPdf = async (invoice: Sale) => {
-    try {
-      await openSaleA4Pdf(invoice);
-    } catch (error) {
-      console.error(error);
-      showSnackbar('ไม่สามารถเปิด PDF ได้ กรุณาอนุญาตการเปิดหน้าต่างใหม่', 'error');
-    }
-  };
+  const handleOpenPdf = (invoice: Sale) => setPdfInvoice(invoice);
 
   const handleMarkPaid = async () => {
     if (!invoiceToPay?.id) return;
@@ -274,7 +268,7 @@ export default function InvoiceHistory() {
                             <VisibilityOutlinedIcon />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="เปิด PDF">
+                        <Tooltip title="Preview PDF">
                           <IconButton onClick={() => handleOpenPdf(invoice)}>
                             <PictureAsPdfOutlinedIcon />
                           </IconButton>
@@ -374,7 +368,7 @@ export default function InvoiceHistory() {
             </DialogContent>
             <DialogActions>
               <Button onClick={() => handleOpenPdf(selectedInvoice)} startIcon={<PictureAsPdfOutlinedIcon />}>
-                เปิด PDF
+                Preview PDF
               </Button>
               {getPaymentStatus(selectedInvoice) === 'unpaid' && (
                 <Button
@@ -415,6 +409,8 @@ export default function InvoiceHistory() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <SaleA4PreviewDialog sale={pdfInvoice} onClose={() => setPdfInvoice(null)} />
 
       <Snackbar
         open={snackbar.open}

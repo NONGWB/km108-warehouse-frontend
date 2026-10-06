@@ -37,8 +37,12 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import { OrderNote, OrderNoteItem } from '@/types/orderNote';
+import { useAuth } from '@/contexts/AuthContext';
+import { isManagerRole } from '@/types/auth';
 
 export default function ManageOrderNotes() {
+  const { profile } = useAuth();
+  const canDelete = Boolean(profile && isManagerRole(profile.role));
   const [notes, setNotes] = useState<OrderNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -301,9 +305,9 @@ export default function ManageOrderNotes() {
                     <IconButton size="small" onClick={() => handleOpenDialog(note)} color="primary">
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => handleDeleteClick(note)} color="error">
+                    {canDelete && <IconButton size="small" onClick={() => handleDeleteClick(note)} color="error">
                       <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    </IconButton>}
                   </Box>
                 </CardActions>
 
@@ -410,7 +414,7 @@ export default function ManageOrderNotes() {
                   {items.map((item, index) => (
                     <ListItem key={index} sx={{ py: 0.5 }}>
                       <ListItemText primary={item.item_name} />
-                      <ListItemSecondaryAction>
+                      {canDelete && <ListItemSecondaryAction>
                         <IconButton 
                           edge="end" 
                           size="small" 
@@ -419,7 +423,7 @@ export default function ManageOrderNotes() {
                         >
                           <DeleteIcon fontSize="small" />
                         </IconButton>
-                      </ListItemSecondaryAction>
+                      </ListItemSecondaryAction>}
                     </ListItem>
                   ))}
                 </List>
@@ -436,7 +440,7 @@ export default function ManageOrderNotes() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+      <Dialog open={canDelete && deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
         <DialogTitle>ยืนยันการลบ</DialogTitle>
         <DialogContent>
           <Typography>

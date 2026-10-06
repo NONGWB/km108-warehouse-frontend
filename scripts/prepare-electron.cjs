@@ -26,6 +26,11 @@ fs.mkdirSync(runtimeRoot, { recursive: true });
 fs.cpSync(standaloneSource, serverTarget, { recursive: true });
 fs.cpSync(staticSource, path.join(serverTarget, '.next', 'static'), { recursive: true });
 fs.cpSync(publicSource, path.join(serverTarget, 'public'), { recursive: true });
-fs.copyFileSync(envSource, path.join(runtimeRoot, 'app.env'));
+const sourceEnv = parseEnvFile(envSource);
+const packagedEnvNames = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'];
+const packagedEnv = packagedEnvNames
+  .map((name) => `${name}=${sourceEnv[name] || ''}`)
+  .join('\n');
+fs.writeFileSync(path.join(runtimeRoot, 'app.env'), `${packagedEnv}\n`, 'utf8');
 
 console.log(`Electron runtime prepared at ${runtimeRoot}`);

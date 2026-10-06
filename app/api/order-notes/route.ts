@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { authorizeApiRequest, MANAGER_ROLES } from '@/lib/apiAuth';
 
 // GET all order notes with items
 export async function GET() {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const { data: notes, error } = await supabase
       .from('order_notes')
@@ -34,6 +37,9 @@ export async function GET() {
 
 // POST create new order note with items
 export async function POST(request: Request) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const body = await request.json();
     const { note_name, note_date, items } = body;
@@ -86,6 +92,9 @@ export async function POST(request: Request) {
 
 // PUT update order note with items
 export async function PUT(request: Request) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const body = await request.json();
     const { id, note_name, note_date, items } = body;
@@ -145,6 +154,9 @@ export async function PUT(request: Request) {
 
 // DELETE order note (items will cascade delete)
 export async function DELETE(request: Request) {
+  const auth = await authorizeApiRequest(MANAGER_ROLES);
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

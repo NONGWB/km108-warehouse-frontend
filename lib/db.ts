@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { Product } from '@/types/product';
 
 // Database row type (snake_case from Postgres)
@@ -39,7 +39,7 @@ function toRow(product: Product): ProductRow {
 }
 
 // Convert ProductRow (snake_case) to Product (PascalCase)
-function toProduct(row: ProductRow): Product {
+function toProduct(row: ProductRow, supabase: SupabaseClient): Product {
   const imageUrl = row.image_path
     ? supabase.storage.from('product-images').getPublicUrl(row.image_path).data.publicUrl
     : null;
@@ -64,7 +64,7 @@ function toProduct(row: ProductRow): Product {
   };
 }
 
-export async function readProducts(): Promise<Product[]> {
+export async function readProducts(supabase: SupabaseClient): Promise<Product[]> {
   const { data, error } = await supabase
     .from('products')
     .select('*')
@@ -75,10 +75,10 @@ export async function readProducts(): Promise<Product[]> {
     throw new Error('Failed to read products from database');
   }
 
-  return (data || []).map(toProduct);
+  return (data || []).map((row) => toProduct(row, supabase));
 }
 
-export async function addProduct(product: Product): Promise<Product> {
+export async function addProduct(supabase: SupabaseClient, product: Product): Promise<Product> {
   const row = toRow(product);
   
   const { data, error } = await supabase
@@ -92,10 +92,11 @@ export async function addProduct(product: Product): Promise<Product> {
     throw new Error(error.message || 'Failed to add product');
   }
 
-  return toProduct(data);
+  return toProduct(data, supabase);
 }
 
 export async function updateProduct(
+  supabase: SupabaseClient,
   productName: string,
   updatedProduct: Product
 ): Promise<Product | null> {
@@ -116,10 +117,10 @@ export async function updateProduct(
     throw new Error(error.message || 'Failed to update product');
   }
 
-  return toProduct(data);
+  return toProduct(data, supabase);
 }
 
-export async function deleteProduct(productName: string): Promise<boolean> {
+export async function deleteProduct(supabase: SupabaseClient, productName: string): Promise<boolean> {
   const { data: product, error: findError } = await supabase
     .from('products')
     .select('id, image_path')
@@ -158,7 +159,7 @@ export async function deleteProduct(productName: string): Promise<boolean> {
   return deleted;
 }
 
-export async function bulkInsertProducts(products: Product[]): Promise<number> {
+export async function bulkInsertProducts(supabase: SupabaseClient, products: Product[]): Promise<number> {
   const rows = products.map(toRow);
   
   const { data, error } = await supabase

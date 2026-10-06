@@ -36,8 +36,12 @@ import ChatIcon from '@mui/icons-material/Chat';
 import PersonIcon from '@mui/icons-material/Person';
 import ContactsIcon from '@mui/icons-material/Contacts';
 import { Contact } from '@/types/contact';
+import { useAuth } from '@/contexts/AuthContext';
+import { isManagerRole } from '@/types/auth';
 
 export default function ManageContacts() {
+  const { profile } = useAuth();
+  const canDelete = Boolean(profile && isManagerRole(profile.role));
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -278,9 +282,9 @@ export default function ManageContacts() {
                     <IconButton size="small" onClick={() => handleOpenDialog(contact)} color="primary">
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => handleDeleteClick(contact)} color="error">
+                    {canDelete && <IconButton size="small" onClick={() => handleDeleteClick(contact)} color="error">
                       <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    </IconButton>}
                   </Box>
                 </Box>
               </CardContent>
@@ -365,7 +369,7 @@ export default function ManageContacts() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+      <Dialog open={canDelete && deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
         <DialogTitle>ยืนยันการลบ</DialogTitle>
         <DialogContent>
           <Typography>

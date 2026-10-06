@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { authorizeApiRequest } from '@/lib/apiAuth';
 
 // PUT toggle item completion status
 export async function PUT(request: Request) {
+  const auth = await authorizeApiRequest();
+  if (!auth.ok) return auth.response;
+  const supabase = auth.supabase;
   try {
     const body = await request.json();
     const { id, is_completed } = body;
