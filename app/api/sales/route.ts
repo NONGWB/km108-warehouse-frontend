@@ -1,364 +1,304 @@
 import { NextResponse } from 'next/server';
 import { authorizeApiRequest, MANAGER_ROLES } from '@/lib/apiAuth';
+import { isManagerRole } from '@/types/auth';
 
 type PaymentType = 'cash' | 'credit';
 type DocumentType = 'sales_slip' | 'invoice' | 'company_receipt';
+type SaleStatus = 'draft' | 'completed';
+
+interface CheckoutItemInput {
+  product_id?: unknown;
+  quantity?: unknown;
+  unit_price?: unknown;
+}
+
+interface SaleRequestBody {
+  id?: string;
+  idempotency_key?: string;
+  sale_date?: string;
+  customer_id?: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  customer_address?: string | null;
+  discount?: number;
+  payment_type?: PaymentType;
+  document_type?: DocumentType;
+  amount_paid?: number;
+  status?: SaleStatus;
+  items?: CheckoutItemInput[];
+  action?: string;
+  payment_status?: 'paid' | 'unpaid';
+  reason?: string;
+}
+
+interface SaleRpcError {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+}
+
 const MAX_QUANTITY = 9_999_999.999;
 
-function getSaleItemsValidationError(items: unknown): string | null {
-  if (items === undefined || items === null) return null;
-  if (!Array.isArray(items)) return 'Items must be an array';
+function resolveDocumentType(paymentType?: PaymentType, documentType?: DocumentType): DocumentType | undefined {
+  return documentType || (paymentType === 'credit' ? 'invoice' : paymentType === 'cash' ? 'sales_slip' : undefined);
+}
 
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index] as { quantity?: unknown };
-    const rawQuantity = item?.quantity;
-    const quantityText = String(rawQuantity ?? '');
-    const quantity = Number(rawQuantity);
-    const hasValidPrecision = /^\d{1,7}(?:\.\d{1,3})?$/.test(quantityText);
+function validateSaleInput(body: SaleRequestBody): string | null {
+  if (!body.payment_type || !['cash', 'credit'].includes(body.payment_type)) {
+    return 'กรุณาระบุวิธีชำระเงินให้ถูกต้อง';
+  }
 
-    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_QUANTITY || !hasValidPrecision) {
-      return `Invalid quantity at item ${index + 1}: use a positive number with no more than 3 decimal places`;
+  const documentType = resolveDocumentType(body.payment_type, body.document_type);
+  const validDocument = body.payment_type === 'credit'
+    ? documentType === 'invoice'
+    : documentType === 'sales_slip' || documentType === 'company_receipt';
+  if (!validDocument) return 'ประเภทเอกสารไม่ตรงกับวิธีชำระเงิน';
+
+  if (!body.status || !['draft', 'completed'].includes(body.status)) {
+    return 'สถานะการขายไม่ถูกต้อง';
+  }
+  if (!Array.isArray(body.items) || body.items.length === 0) {
+    return 'กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ';
+  }
+
+  for (let index = 0; index < body.items.length; index += 1) {
+    const item = body.items[index];
+    if (!item.product_id || typeof item.product_id !== 'string') {
+      return `สินค้าแถวที่ ${index + 1} ไม่มี product_id`;
+    }
+
+    const quantityText = String(item.quantity ?? '');
+    const quantity = Number(item.quantity);
+    if (!/^\d{1,7}(?:\.\d{1,3})?$/.test(quantityText)
+      || !Number.isFinite(quantity)
+      || quantity <= 0
+      || quantity > MAX_QUANTITY) {
+      return `จำนวนสินค้าแถวที่ ${index + 1} ไม่ถูกต้อง`;
+    }
+
+    const unitPrice = Number(item.unit_price);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      return `ราคาสินค้าแถวที่ ${index + 1} ไม่ถูกต้อง`;
     }
   }
 
   return null;
 }
 
-function resolveDocumentType(paymentType: PaymentType, documentType?: DocumentType): DocumentType {
-  return documentType || (paymentType === 'credit' ? 'invoice' : 'sales_slip');
+function rpcErrorResponse(error: SaleRpcError | null) {
+  const rawMessage = [error?.message, error?.details].filter(Boolean).join(' ');
+  const mappings: Array<[string, string, number]> = [
+    ['PGRST202', 'ยังไม่ได้ติดตั้ง Sale RPC ครบ กรุณารัน scripts/harden-sales-transactions.sql ทั้งไฟล์อีกครั้ง', 503],
+    ['PGRST203', 'พบ Sale RPC ซ้ำหรือ signature ไม่ตรง กรุณารัน migration เวอร์ชันล่าสุดทั้งไฟล์อีกครั้ง', 503],
+    ['42P01', 'โครงสร้างตารางสำหรับการขายยังไม่ครบ กรุณารัน migration เวอร์ชันล่าสุดทั้งไฟล์อีกครั้ง', 503],
+    ['42703', 'คอลัมน์สำหรับการขายยังไม่ครบ กรุณารัน migration เวอร์ชันล่าสุดทั้งไฟล์อีกครั้ง', 503],
+    ['42883', 'ฟังก์ชันฐานข้อมูลสำหรับการขายยังไม่ครบ กรุณารัน migration เวอร์ชันล่าสุดทั้งไฟล์อีกครั้ง', 503],
+    ['schema cache', 'Supabase ยังไม่พบ Sale RPC ใน schema cache กรุณารัน migration เวอร์ชันล่าสุดอีกครั้ง', 503],
+    ['Could not find the function', 'ยังไม่ได้ติดตั้ง Sale RPC ครบ กรุณารัน migration เวอร์ชันล่าสุดทั้งไฟล์อีกครั้ง', 503],
+    ['PRICE_CHANGED', 'ราคาสินค้ามีการเปลี่ยนแปลง กรุณาโหลดสินค้าใหม่แล้วตรวจสอบราคาอีกครั้ง', 409],
+    ['IDEMPOTENCY_KEY_REQUIRED', 'ไม่พบรหัสป้องกันบิลซ้ำ กรุณาลองใหม่อีกครั้ง', 400],
+    ['ITEMS_REQUIRED', 'กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ', 400],
+    ['PRODUCT_ID_REQUIRED', 'รายการสินค้าบางรายการไม่มี product_id', 400],
+    ['PRODUCT_NOT_FOUND', 'ไม่พบสินค้าบางรายการ กรุณาโหลดสินค้าใหม่', 404],
+    ['INVALID_QUANTITY', 'จำนวนสินค้าไม่ถูกต้อง', 400],
+    ['INVALID_DISCOUNT', 'ส่วนลดไม่ถูกต้องหรือมากกว่ายอดรวม', 400],
+    ['INSUFFICIENT_PAYMENT', 'จำนวนเงินที่รับมาน้อยกว่ายอดสุทธิ', 400],
+    ['CUSTOMER_NOT_FOUND', 'ไม่พบข้อมูลลูกค้าที่เลือก', 404],
+    ['CUSTOMER_NAME_REQUIRED', 'เอกสารประเภทนี้ต้องระบุชื่อลูกค้า', 400],
+    ['SALE_NOT_DRAFT', 'แก้ไขได้เฉพาะบิลฉบับร่างเท่านั้น', 409],
+    ['SALE_NOT_FOUND', 'ไม่พบรายการขาย', 404],
+    ['COMPLETED_INVOICE_NOT_FOUND', 'ไม่พบใบแจ้งหนี้ที่แก้ไขสถานะการชำระได้', 404],
+    ['COMPLETED_SALE_NOT_FOUND', 'ไม่พบบิลที่สามารถยกเลิกได้', 404],
+    ['VOID_REASON_REQUIRED', 'กรุณาระบุเหตุผลการยกเลิกอย่างน้อย 3 ตัวอักษร', 400],
+    ['MANAGER_REQUIRED', 'เฉพาะ Admin หรือ Shop Owner เท่านั้นที่ยกเลิกบิลได้', 403],
+    ['ACTIVE_USER_REQUIRED', 'บัญชีผู้ใช้ไม่พร้อมใช้งาน กรุณาเข้าสู่ระบบใหม่', 401],
+    ['COMPLETED_SALE_CANNOT_BE_DELETED', 'บิลที่ปิดการขายแล้วห้ามลบ ให้ใช้การยกเลิกบิลแทน', 409],
+  ];
+
+  const mapped = mappings.find(([code]) => error?.code === code || rawMessage.includes(code));
+  const diagnosticCodes = ['PGRST202', 'PGRST203', '42P01', '42703', '42883'];
+  const canExposeDiagnostic = process.env.NODE_ENV === 'development'
+    || Boolean(error?.code && diagnosticCodes.includes(error.code));
+  const developmentDetails = canExposeDiagnostic && error
+    ? {
+        diagnostic: {
+          code: error.code || null,
+          message: error.message || null,
+          details: error.details || null,
+          hint: error.hint || null,
+        },
+      }
+    : {};
+  if (mapped) {
+    return NextResponse.json({ error: mapped[1], ...developmentDetails }, { status: mapped[2] });
+  }
+
+  console.error('Sale RPC error:', error);
+  return NextResponse.json(
+    { error: 'ไม่สามารถบันทึกข้อมูลการขายได้', ...developmentDetails },
+    { status: 500 },
+  );
 }
 
-function isValidSaleMethod(paymentType: PaymentType, documentType: DocumentType) {
-  return paymentType === 'credit'
-    ? documentType === 'invoice'
-    : documentType === 'sales_slip' || documentType === 'company_receipt';
+function saleRpcParams(body: SaleRequestBody) {
+  return {
+    p_sale_date: body.sale_date || null,
+    p_customer_id: body.customer_id || null,
+    p_customer_name: body.customer_name?.trim() || null,
+    p_customer_phone: body.customer_phone?.trim() || null,
+    p_customer_address: body.customer_address?.trim() || null,
+    p_discount: Number(body.discount || 0),
+    p_payment_type: body.payment_type,
+    p_document_type: resolveDocumentType(body.payment_type, body.document_type),
+    p_amount_paid: Number(body.amount_paid || 0),
+    p_status: body.status,
+    p_items: (body.items || []).map((item) => ({
+      product_id: item.product_id,
+      quantity: Number(item.quantity),
+      // Used only to detect a price change. The database remains authoritative.
+      unit_price: Number(item.unit_price),
+    })),
+  };
 }
 
-// GET all sales with items
+function normalizeSale(sale: Record<string, unknown>) {
+  const saleItems = sale.sale_items;
+  const { sale_items: _saleItems, ...rest } = sale;
+  void _saleItems;
+  return {
+    ...rest,
+    document_type: sale.document_type || (sale.payment_type === 'credit' ? 'invoice' : 'sales_slip'),
+    payment_status: sale.payment_status || (sale.payment_type === 'cash' ? 'paid' : 'unpaid'),
+    items: Array.isArray(sale.items) ? sale.items : (Array.isArray(saleItems) ? saleItems : []),
+  };
+}
+
 export async function GET(request: Request) {
   const auth = await authorizeApiRequest();
   if (!auth.ok) return auth.response;
-  const supabase = auth.supabase;
+
   try {
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status'); // filter by status (draft/completed)
+    const statuses = searchParams.get('status')?.split(',').map((value) => value.trim()).filter(Boolean) || [];
     const documentType = searchParams.get('document_type');
     const paymentStatus = searchParams.get('payment_status');
 
-    let query = supabase
+    let query = auth.supabase
       .from('sales')
-      .select(`
-        *,
-        sale_items (*)
-      `)
+      .select('*, sale_items (*)')
       .order('updated_at', { ascending: false })
       .order('sale_date', { ascending: false });
 
-    if (status) {
-      query = query.eq('status', status);
-    }
+    if (statuses.length === 1) query = query.eq('status', statuses[0]);
+    if (statuses.length > 1) query = query.in('status', statuses);
+    if (documentType) query = query.eq('document_type', documentType);
+    if (paymentStatus) query = query.eq('payment_status', paymentStatus);
 
-    if (documentType) {
-      query = query.eq('document_type', documentType);
-    }
-
-    if (paymentStatus) {
-      query = query.eq('payment_status', paymentStatus);
-    }
-
-    const { data: sales, error } = await query;
-
+    const { data, error } = await query;
     if (error) throw error;
-
-    // Transform to match our interface
-    const transformedSales = sales?.map(sale => ({
-      id: sale.id,
-      document_number: sale.document_number,
-      seller_id: sale.seller_id,
-      seller_name: sale.seller_name,
-      sale_date: sale.sale_date,
-      total_amount: sale.total_amount,
-      discount: sale.discount,
-      net_amount: sale.net_amount,
-      payment_type: sale.payment_type,
-      document_type: sale.document_type || (sale.payment_type === 'credit' ? 'invoice' : 'sales_slip'),
-      payment_status: sale.payment_status || (sale.payment_type === 'cash' ? 'paid' : 'unpaid'),
-      paid_at: sale.paid_at,
-      customer_id: sale.customer_id,
-      customer_name: sale.customer_name,
-      customer_phone: sale.customer_phone,
-      customer_address: sale.customer_address,
-      amount_paid: sale.amount_paid,
-      change_amount: sale.change_amount,
-      status: sale.status,
-      created_at: sale.created_at,
-      updated_at: sale.updated_at,
-      items: sale.sale_items || []
-    })) || [];
-
-    return NextResponse.json(transformedSales);
+    return NextResponse.json((data || []).map((sale) => normalizeSale(sale)));
   } catch (error) {
     console.error('Error fetching sales:', error);
-    return NextResponse.json({ error: 'Failed to fetch sales' }, { status: 500 });
+    return NextResponse.json({ error: 'ไม่สามารถโหลดข้อมูลการขายได้' }, { status: 500 });
   }
 }
 
-// POST create new sale with items
 export async function POST(request: Request) {
   const auth = await authorizeApiRequest();
   if (!auth.ok) return auth.response;
-  const supabase = auth.supabase;
+
   try {
-    const body = await request.json();
-    const { sale_date, customer_id, customer_name, customer_phone, customer_address, total_amount, discount, net_amount, payment_type, document_type, amount_paid, change_amount, status, items } = body;
-    const resolvedDocumentType = resolveDocumentType(payment_type, document_type);
-    const itemsValidationError = getSaleItemsValidationError(items);
-
-    if (itemsValidationError) {
-      return NextResponse.json({ error: itemsValidationError }, { status: 400 });
+    const body = await request.json() as SaleRequestBody;
+    const validationError = validateSaleInput(body);
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+    if (!body.idempotency_key) {
+      return NextResponse.json({ error: 'ไม่พบรหัสป้องกันบิลซ้ำ กรุณาลองใหม่อีกครั้ง' }, { status: 400 });
     }
 
-    if (!isValidSaleMethod(payment_type, resolvedDocumentType)) {
-      return NextResponse.json({ error: 'Invalid payment and document type combination' }, { status: 400 });
-    }
-
-    // Insert sale
-    const { data: sale, error: saleError } = await supabase
-      .from('sales')
-      .insert({ 
-        sale_date,
-        customer_id: customer_id || null,
-        customer_name: customer_name?.trim() || null,
-        customer_phone: customer_phone?.trim() || null,
-        customer_address: customer_address?.trim() || null,
-        seller_id: auth.user.id,
-        seller_name: auth.profile.name,
-        total_amount, 
-        discount, 
-        net_amount, 
-        payment_type,
-        document_type: resolvedDocumentType,
-        amount_paid: amount_paid || 0,
-        change_amount: change_amount || 0,
-        status 
-      })
-      .select()
-      .single();
-
-    if (saleError) throw saleError;
-
-    // Insert items if any
-    if (items && items.length > 0) {
-      const itemsToInsert = items.map((item: any) => ({
-        sale_id: sale.id,
-        ...(item.product_id ? { product_id: item.product_id } : {}),
-        product_name: item.product_name,
-        barcode: item.barcode,
-        unit_price: item.unit_price,
-        quantity: Number(item.quantity),
-        total_price: item.total_price
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .insert(itemsToInsert);
-
-      if (itemsError) throw itemsError;
-    }
-
-    // Fetch the complete sale with items
-    const { data: completeSale, error: fetchError } = await supabase
-      .from('sales')
-      .select(`
-        *,
-        sale_items (*)
-      `)
-      .eq('id', sale.id)
-      .single();
-
-    if (fetchError) throw fetchError;
-
-    return NextResponse.json({
-      ...completeSale,
-      items: completeSale.sale_items || []
+    const { data, error } = await auth.supabase.rpc('create_sale_transaction', {
+      p_idempotency_key: body.idempotency_key,
+      ...saleRpcParams(body),
     });
+    if (error) return rpcErrorResponse(error);
+    return NextResponse.json(data);
   } catch (error) {
     console.error('Error creating sale:', error);
-    return NextResponse.json({ error: 'Failed to create sale' }, { status: 500 });
+    return NextResponse.json({ error: 'ไม่สามารถสร้างรายการขายได้' }, { status: 500 });
   }
 }
 
-// PUT update sale with items
 export async function PUT(request: Request) {
   const auth = await authorizeApiRequest();
   if (!auth.ok) return auth.response;
-  const supabase = auth.supabase;
+
   try {
-    const body = await request.json();
-    const { id, sale_date, customer_id, customer_name, customer_phone, customer_address, total_amount, discount, net_amount, payment_type, document_type, amount_paid, change_amount, status, items } = body;
-    const resolvedDocumentType = resolveDocumentType(payment_type, document_type);
-    const itemsValidationError = getSaleItemsValidationError(items);
+    const body = await request.json() as SaleRequestBody;
+    if (!body.id) return NextResponse.json({ error: 'ไม่พบรหัสรายการขาย' }, { status: 400 });
+    const validationError = validateSaleInput(body);
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
-    if (itemsValidationError) {
-      return NextResponse.json({ error: itemsValidationError }, { status: 400 });
-    }
-
-    if (!isValidSaleMethod(payment_type, resolvedDocumentType)) {
-      return NextResponse.json({ error: 'Invalid payment and document type combination' }, { status: 400 });
-    }
-
-    // Update sale
-    const { error: saleError } = await supabase
-      .from('sales')
-      .update({ 
-        sale_date,
-        customer_id: customer_id || null,
-        customer_name: customer_name?.trim() || null,
-        customer_phone: customer_phone?.trim() || null,
-        customer_address: customer_address?.trim() || null,
-        seller_id: auth.user.id,
-        seller_name: auth.profile.name,
-        total_amount, 
-        discount, 
-        net_amount, 
-        payment_type,
-        document_type: resolvedDocumentType,
-        amount_paid: amount_paid || 0,
-        change_amount: change_amount || 0,
-        status 
-      })
-      .eq('id', id);
-
-    if (saleError) throw saleError;
-
-    // Delete existing items and insert new ones
-    const { error: deleteError } = await supabase
-      .from('sale_items')
-      .delete()
-      .eq('sale_id', id);
-
-    if (deleteError) throw deleteError;
-
-    // Insert new items
-    if (items && items.length > 0) {
-      const itemsToInsert = items.map((item: any) => ({
-        sale_id: id,
-        ...(item.product_id ? { product_id: item.product_id } : {}),
-        product_name: item.product_name,
-        barcode: item.barcode,
-        unit_price: item.unit_price,
-        quantity: Number(item.quantity),
-        total_price: item.total_price
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .insert(itemsToInsert);
-
-      if (itemsError) throw itemsError;
-    }
-
-    // Fetch the updated sale with items
-    const { data: updatedSale, error: fetchError } = await supabase
-      .from('sales')
-      .select(`
-        *,
-        sale_items (*)
-      `)
-      .eq('id', id)
-      .single();
-
-    if (fetchError) throw fetchError;
-
-    return NextResponse.json({
-      ...updatedSale,
-      items: updatedSale.sale_items || []
+    const { data, error } = await auth.supabase.rpc('update_draft_sale_transaction', {
+      p_sale_id: body.id,
+      ...saleRpcParams(body),
     });
+    if (error) return rpcErrorResponse(error);
+    return NextResponse.json(data);
   } catch (error) {
     console.error('Error updating sale:', error);
-    return NextResponse.json({ error: 'Failed to update sale' }, { status: 500 });
+    return NextResponse.json({ error: 'ไม่สามารถแก้ไขรายการขายได้' }, { status: 500 });
   }
 }
 
-// PATCH update invoice payment status without replacing sale items
 export async function PATCH(request: Request) {
   const auth = await authorizeApiRequest();
   if (!auth.ok) return auth.response;
-  const supabase = auth.supabase;
+
   try {
-    const body = await request.json();
-    const { id, payment_status } = body as {
-      id?: string;
-      payment_status?: 'unpaid' | 'paid';
-    };
+    const body = await request.json() as SaleRequestBody;
+    if (!body.id) return NextResponse.json({ error: 'ไม่พบรหัสรายการขาย' }, { status: 400 });
 
-    if (!id || !payment_status || !['unpaid', 'paid'].includes(payment_status)) {
-      return NextResponse.json({ error: 'Valid id and payment_status are required' }, { status: 400 });
+    if (body.action === 'void') {
+      if (!isManagerRole(auth.profile.role)) {
+        return NextResponse.json({ error: 'เฉพาะ Admin หรือ Shop Owner เท่านั้นที่ยกเลิกบิลได้' }, { status: 403 });
+      }
+      const { data, error } = await auth.supabase.rpc('void_sale_transaction', {
+        p_sale_id: body.id,
+        p_reason: body.reason || '',
+      });
+      if (error) return rpcErrorResponse(error);
+      return NextResponse.json(data);
     }
 
-    const { data: existingSale, error: findError } = await supabase
-      .from('sales')
-      .select('id, net_amount, status, document_type')
-      .eq('id', id)
-      .eq('status', 'completed')
-      .eq('document_type', 'invoice')
-      .single();
-
-    if (findError || !existingSale) {
-      return NextResponse.json({ error: 'Completed invoice not found' }, { status: 404 });
+    if (!body.payment_status || !['paid', 'unpaid'].includes(body.payment_status)) {
+      return NextResponse.json({ error: 'สถานะการชำระเงินไม่ถูกต้อง' }, { status: 400 });
     }
-
-    const paidAt = payment_status === 'paid' ? new Date().toISOString() : null;
-    const { data: updatedSale, error: updateError } = await supabase
-      .from('sales')
-      .update({
-        payment_status,
-        paid_at: paidAt,
-        amount_paid: payment_status === 'paid' ? existingSale.net_amount : 0,
-        change_amount: 0,
-      })
-      .eq('id', id)
-      .select(`
-        *,
-        sale_items (*)
-      `)
-      .single();
-
-    if (updateError) throw updateError;
-
-    return NextResponse.json({
-      ...updatedSale,
-      items: updatedSale.sale_items || [],
+    const { data, error } = await auth.supabase.rpc('set_invoice_payment_status_transaction', {
+      p_sale_id: body.id,
+      p_payment_status: body.payment_status,
     });
+    if (error) return rpcErrorResponse(error);
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Error updating invoice payment status:', error);
-    return NextResponse.json({ error: 'Failed to update invoice payment status' }, { status: 500 });
+    console.error('Error updating sale status:', error);
+    return NextResponse.json({ error: 'ไม่สามารถเปลี่ยนสถานะรายการขายได้' }, { status: 500 });
   }
 }
 
-// DELETE sale (items will cascade delete)
 export async function DELETE(request: Request) {
   const auth = await authorizeApiRequest(MANAGER_ROLES);
   if (!auth.ok) return auth.response;
-  const supabase = auth.supabase;
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'ไม่พบรหัสรายการขาย' }, { status: 400 });
 
-    if (!id) {
-      return NextResponse.json({ error: 'ID is required' }, { status: 400 });
-    }
-
-    const { error } = await supabase
-      .from('sales')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw error;
-
+    const { error } = await auth.supabase.rpc('delete_draft_sale_transaction', { p_sale_id: id });
+    if (error) return rpcErrorResponse(error);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting sale:', error);
-    return NextResponse.json({ error: 'Failed to delete sale' }, { status: 500 });
+    return NextResponse.json({ error: 'ไม่สามารถลบฉบับร่างได้' }, { status: 500 });
   }
 }

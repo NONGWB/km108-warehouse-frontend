@@ -35,10 +35,13 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 import type { Sale } from '@/types/sale';
 import SaleA4PreviewDialog from '@/components/SaleA4PreviewDialog';
+import { useAuth } from '@/contexts/AuthContext';
+import { isManagerRole } from '@/types/auth';
 
-type PaymentFilter = 'all' | 'unpaid' | 'paid';
+type PaymentFilter = 'all' | 'unpaid' | 'paid' | 'voided';
 
 const formatMoney = (value: number) =>
   Number(value || 0).toLocaleString('th-TH', {
@@ -57,14 +60,19 @@ const getDocumentNumber = (sale: Sale) =>
   sale.document_number || `INV-${sale.id?.substring(0, 8).toUpperCase() || '-'}`;
 
 const getPaymentStatus = (sale: Sale) => sale.payment_status || 'unpaid';
+const isVoided = (sale: Sale) => sale.status === 'voided';
 
 export default function InvoiceHistory() {
+  const { profile } = useAuth();
+  const canVoidSale = Boolean(profile && isManagerRole(profile.role));
   const [invoices, setInvoices] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [selectedInvoice, setSelectedInvoice] = useState<Sale | null>(null);
   const [invoiceToPay, setInvoiceToPay] = useState<Sale | null>(null);
+  const [invoiceToVoid, setInvoiceToVoid] = useState<Sale | null>(null);
+  const [voidReason, setVoidReason] = useState('');
   const [pdfInvoice, setPdfInvoice] = useState<Sale | null>(null);
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState({
@@ -80,7 +88,7 @@ export default function InvoiceHistory() {
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/sales?status=completed&document_type=invoice');
+      const response = await fetch('/api/sales?status=completed,voided&document_type=invoice');
       if (!response.ok) throw new Error('Failed to fetch invoices');
       setInvoices(await response.json());
     } catch (error) {
@@ -98,7 +106,9 @@ export default function InvoiceHistory() {
   const filteredInvoices = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return invoices.filter((invoice) => {
-      if (paymentFilter !== 'all' && getPaymentStatus(invoice) !== paymentFilter) return false;
+      if (paymentFilter === 'voided' && !isVoided(invoice)) return false;
+      if (paymentFilter === 'paid' && (isVoided(invoice) || getPaymentStatus(invoice) !== 'paid')) return false;
+      if (paymentFilter === 'unpaid' && (isVoided(invoice) || getPaymentStatus(invoice) !== 'unpaid')) return false;
       if (!term) return true;
 
       return [
@@ -113,7 +123,7 @@ export default function InvoiceHistory() {
 
   const outstandingTotal = useMemo(
     () => invoices
-      .filter((invoice) => getPaymentStatus(invoice) === 'unpaid')
+      .filter((invoice) => !isVoided(invoice) && getPaymentStatus(invoice) === 'unpaid')
       .reduce((sum, invoice) => sum + Number(invoice.net_amount || 0), 0),
     [invoices]
   );
@@ -134,7 +144,10 @@ export default function InvoiceHistory() {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to update payment status');
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || 'ไม่สามารถบันทึกสถานะการชำระเงินได้');
+      }
       const updatedInvoice: Sale = await response.json();
       setInvoices((current) => current.map((invoice) =>
         invoice.id === updatedInvoice.id ? updatedInvoice : invoice
@@ -146,7 +159,51 @@ export default function InvoiceHistory() {
       showSnackbar('บันทึกการชำระเงินแล้ว ใบแจ้งหนี้จะแสดงลายน้ำ “ชำระแล้ว”', 'success');
     } catch (error) {
       console.error(error);
-      showSnackbar('ไม่สามารถบันทึกสถานะการชำระเงินได้', 'error');
+      showSnackbar(error instanceof Error ? error.message : 'ไม่สามารถบันทึกสถานะการชำระเงินได้', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleVoidSale = async () => {
+    if (!invoiceToVoid?.id) return;
+    if (voidReason.trim().length < 3) {
+      showSnackbar('กรุณาระบุเหตุผลการยกเลิกอย่างน้อย 3 ตัวอักษร', 'error');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await fetch('/api/sales', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: invoiceToVoid.id,
+          action: 'void',
+          reason: voidReason.trim(),
+        }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || 'ไม่สามารถยกเลิกบิลได้');
+      }
+
+      const updatedInvoice: Sale = await response.json();
+      setInvoices((current) => current.map((invoice) =>
+        invoice.id === updatedInvoice.id ? updatedInvoice : invoice
+      ));
+      setSelectedInvoice((current) =>
+        current?.id === updatedInvoice.id ? updatedInvoice : current
+      );
+      setPdfInvoice((current) =>
+        current?.id === updatedInvoice.id ? updatedInvoice : current
+      );
+      setInvoiceToVoid(null);
+      setVoidReason('');
+      showSnackbar('ยกเลิกบิลแล้ว เอกสารย้อนหลังจะแสดงลายน้ำ “ยกเลิก”', 'success');
+    } catch (error) {
+      console.error(error);
+      showSnackbar(error instanceof Error ? error.message : 'ไม่สามารถยกเลิกบิลได้', 'error');
     } finally {
       setSaving(false);
     }
@@ -198,15 +255,16 @@ export default function InvoiceHistory() {
             }}
           />
           <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 190 } }}>
-            <InputLabel>สถานะการชำระ</InputLabel>
+            <InputLabel>สถานะเอกสาร</InputLabel>
             <Select
               value={paymentFilter}
-              label="สถานะการชำระ"
+              label="สถานะเอกสาร"
               onChange={(event) => setPaymentFilter(event.target.value as PaymentFilter)}
             >
               <MenuItem value="all">ทั้งหมด</MenuItem>
               <MenuItem value="unpaid">ค้างชำระ</MenuItem>
               <MenuItem value="paid">ชำระแล้ว</MenuItem>
+              <MenuItem value="voided">ยกเลิกแล้ว</MenuItem>
             </Select>
           </FormControl>
         </Stack>
@@ -238,6 +296,7 @@ export default function InvoiceHistory() {
               <TableBody>
                 {filteredInvoices.map((invoice) => {
                   const isPaid = getPaymentStatus(invoice) === 'paid';
+                  const voided = isVoided(invoice);
                   return (
                     <TableRow key={invoice.id} hover>
                       <TableCell sx={{ fontWeight: 700 }}>{getDocumentNumber(invoice)}</TableCell>
@@ -256,12 +315,12 @@ export default function InvoiceHistory() {
                       <TableCell>
                         <Chip
                           size="small"
-                          color={isPaid ? 'success' : 'default'}
-                          variant={isPaid ? 'filled' : 'outlined'}
-                          label={isPaid ? 'ชำระแล้ว' : 'ค้างชำระ'}
+                          color={voided ? 'error' : isPaid ? 'success' : 'default'}
+                          variant={voided || isPaid ? 'filled' : 'outlined'}
+                          label={voided ? 'ยกเลิกแล้ว' : isPaid ? 'ชำระแล้ว' : 'ค้างชำระ'}
                         />
                       </TableCell>
-                      <TableCell>{isPaid ? formatDate(invoice.paid_at, true) : '-'}</TableCell>
+                      <TableCell>{!voided && isPaid ? formatDate(invoice.paid_at, true) : '-'}</TableCell>
                       <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
                         <Tooltip title="ดูรายละเอียด">
                           <IconButton onClick={() => setSelectedInvoice(invoice)}>
@@ -273,10 +332,17 @@ export default function InvoiceHistory() {
                             <PictureAsPdfOutlinedIcon />
                           </IconButton>
                         </Tooltip>
-                        {!isPaid && (
+                        {!voided && !isPaid && (
                           <Tooltip title="ยืนยันว่าชำระแล้ว">
                             <IconButton color="success" onClick={() => setInvoiceToPay(invoice)}>
                               <PaymentsOutlinedIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {canVoidSale && !voided && (
+                          <Tooltip title="ยกเลิกบิล">
+                            <IconButton color="error" onClick={() => setInvoiceToVoid(invoice)}>
+                              <BlockOutlinedIcon />
                             </IconButton>
                           </Tooltip>
                         )}
@@ -303,8 +369,8 @@ export default function InvoiceHistory() {
                 <span>{getDocumentNumber(selectedInvoice)}</span>
                 <Chip
                   size="small"
-                  color={getPaymentStatus(selectedInvoice) === 'paid' ? 'success' : 'default'}
-                  label={getPaymentStatus(selectedInvoice) === 'paid' ? 'ชำระแล้ว' : 'ค้างชำระ'}
+                  color={isVoided(selectedInvoice) ? 'error' : getPaymentStatus(selectedInvoice) === 'paid' ? 'success' : 'default'}
+                  label={isVoided(selectedInvoice) ? 'ยกเลิกแล้ว' : getPaymentStatus(selectedInvoice) === 'paid' ? 'ชำระแล้ว' : 'ค้างชำระ'}
                 />
               </Stack>
             </DialogTitle>
@@ -327,8 +393,23 @@ export default function InvoiceHistory() {
                       <Typography>{formatDate(selectedInvoice.paid_at, true)}</Typography>
                     </>
                   )}
+                  {isVoided(selectedInvoice) && (
+                    <>
+                      <Typography variant="caption" color="error" sx={{ display: 'block', mt: 1 }}>
+                        ยกเลิกเมื่อ
+                      </Typography>
+                      <Typography>{formatDate(selectedInvoice.voided_at, true)}</Typography>
+                      <Typography variant="body2">โดย {selectedInvoice.voided_by_name || '-'}</Typography>
+                    </>
+                  )}
                 </Box>
               </Stack>
+
+              {isVoided(selectedInvoice) && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                  เหตุผลที่ยกเลิก: {selectedInvoice.void_reason || '-'}
+                </Alert>
+              )}
 
               <TableContainer component={Paper} variant="outlined">
                 <Table size="small">
@@ -370,7 +451,7 @@ export default function InvoiceHistory() {
               <Button onClick={() => handleOpenPdf(selectedInvoice)} startIcon={<PictureAsPdfOutlinedIcon />}>
                 Preview PDF
               </Button>
-              {getPaymentStatus(selectedInvoice) === 'unpaid' && (
+              {!isVoided(selectedInvoice) && getPaymentStatus(selectedInvoice) === 'unpaid' && (
                 <Button
                   color="success"
                   variant="contained"
@@ -378,6 +459,15 @@ export default function InvoiceHistory() {
                   startIcon={<PaymentsOutlinedIcon />}
                 >
                   รับชำระแล้ว
+                </Button>
+              )}
+              {canVoidSale && !isVoided(selectedInvoice) && (
+                <Button
+                  color="error"
+                  onClick={() => setInvoiceToVoid(selectedInvoice)}
+                  startIcon={<BlockOutlinedIcon />}
+                >
+                  ยกเลิกบิล
                 </Button>
               )}
               <Button onClick={() => setSelectedInvoice(null)}>ปิด</Button>
@@ -406,6 +496,58 @@ export default function InvoiceHistory() {
             disabled={saving}
           >
             {saving ? 'กำลังบันทึก...' : 'ยืนยันว่าชำระแล้ว'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(invoiceToVoid)}
+        onClose={() => {
+          if (saving) return;
+          setInvoiceToVoid(null);
+          setVoidReason('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>ยกเลิกบิล</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            บิลจะยังอยู่ในประวัติและถูกตัดออกจากยอดขาย แต่ไม่สามารถแก้กลับเป็นบิลปกติได้
+          </Alert>
+          <Typography sx={{ mb: 2 }}>
+            {invoiceToVoid ? getDocumentNumber(invoiceToVoid) : ''}
+          </Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={3}
+            label="เหตุผลการยกเลิก"
+            value={voidReason}
+            onChange={(event) => setVoidReason(event.target.value.slice(0, 500))}
+            inputProps={{ maxLength: 500 }}
+            helperText={`${voidReason.length}/500 ตัวอักษร`}
+            error={voidReason.length > 0 && voidReason.trim().length < 3}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setInvoiceToVoid(null);
+              setVoidReason('');
+            }}
+            disabled={saving}
+          >
+            กลับ
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleVoidSale}
+            disabled={saving || voidReason.trim().length < 3}
+          >
+            {saving ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิกบิล'}
           </Button>
         </DialogActions>
       </Dialog>

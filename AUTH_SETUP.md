@@ -10,6 +10,8 @@ Migration จะสร้าง `profiles`, เพิ่มผู้ขายใ
 
 ถ้าเคยรัน migration หลักไปแล้ว และต้องการอัปเดตสิทธิ์ Seller ให้เพิ่ม/แก้ไขข้อมูลหลังร้านได้โดยลบไม่ได้ ให้รัน `scripts/update-role-menu-permissions.sql` เพิ่มอีกหนึ่งครั้ง
 
+จากนั้นรัน `scripts/harden-sales-transactions.sql` เพื่อเปิดใช้การบันทึกบิลแบบ transaction เดียว, คำนวณยอดจากราคาสินค้าในฐานข้อมูล, ป้องกัน request ซ้ำ, ยกเลิกบิลแทนการลบ และ audit log แบบย่อสำหรับเหตุการณ์สำคัญ
+
 ## 2. Deploy ฟังก์ชันจัดการผู้ใช้
 
 ติดตั้งและ Login Supabase CLI แล้วเชื่อม project จากนั้นรัน:

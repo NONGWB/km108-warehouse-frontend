@@ -30,6 +30,7 @@ export function buildSaleA4Document(sale: Sale): TDocumentDefinitions {
     const documentTitleEn = isInvoice ? 'INVOICE' : 'RECEIPT';
     const documentNumber = sale.document_number || `INV-${sale.id?.substring(0, 8).toUpperCase() || '-'}`;
     const isPaid = !isInvoice || sale.payment_status === 'paid';
+    const isVoided = sale.status === 'voided';
 
     const itemRows: TableCell[][] = sale.items.map((item, index) => [
       { text: String(index + 1), alignment: 'center' },
@@ -48,7 +49,9 @@ export function buildSaleA4Document(sale: Sale): TDocumentDefinitions {
       table: {
         widths: ['*'],
         body: [[{
-          text: isPaid
+          text: isVoided
+            ? `สถานะ: ยกเลิกแล้ว${sale.voided_at ? ` เมื่อ ${formatThaiDate(sale.voided_at)}` : ''}${sale.void_reason ? `\nเหตุผล: ${sale.void_reason}` : ''}`
+            : isPaid
             ? `สถานะ: ชำระแล้ว${sale.paid_at ? ` เมื่อ ${formatThaiDate(sale.paid_at)}` : ''}`
             : 'สถานะ: ยังไม่ชำระเงิน',
           bold: true,
@@ -66,7 +69,17 @@ export function buildSaleA4Document(sale: Sale): TDocumentDefinitions {
       pageSize: 'A4',
       pageOrientation: 'portrait',
       pageMargins: [42, 38, 42, 52],
-      watermark: isInvoice && isPaid
+      watermark: isVoided
+        ? {
+            text: 'ยกเลิก',
+            color: '#18181b',
+            opacity: 0.16,
+            bold: true,
+            font: 'GoogleSans',
+            fontSize: 96,
+            angle: -30,
+          }
+        : isInvoice && isPaid
         ? {
             text: 'ชำระแล้ว',
             color: '#18181b',
@@ -211,7 +224,9 @@ export function buildSaleA4Document(sale: Sale): TDocumentDefinitions {
               stack: [
                 { text: isInvoice ? 'หมายเหตุ / เงื่อนไขการชำระเงิน' : 'หมายเหตุ', style: 'sectionTitle' },
                 {
-                  text: isInvoice
+                  text: isVoided
+                    ? `เอกสารนี้ถูกยกเลิก${sale.voided_by_name ? ` โดย ${sale.voided_by_name}` : ''}`
+                    : isInvoice
                     ? isPaid
                       ? 'ได้รับชำระเงินครบถ้วนแล้ว'
                       : 'กรุณาชำระเงินตามเงื่อนไขที่ตกลงกัน เอกสารนี้ยังไม่ใช่หลักฐานการรับชำระเงิน'

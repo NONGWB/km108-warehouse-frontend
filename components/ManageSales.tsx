@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Button,
@@ -183,6 +183,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
     status: 'draft',
     items: [],
   });
+  const idempotencyKeyRef = useRef<string | null>(null);
   
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState('1');
@@ -264,6 +265,24 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
 
   const showSnackbar = (message: string, severity: 'success' | 'error') => {
     setSnackbar({ open: true, message, severity });
+  };
+
+  const getApiError = async (response: Response, fallback: string) => {
+    try {
+      const result = await response.json();
+      return result.error || fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const ensureIdempotencyKey = () => {
+    const key = currentSale.idempotency_key || idempotencyKeyRef.current || crypto.randomUUID();
+    idempotencyKeyRef.current = key;
+    if (!currentSale.idempotency_key) {
+      setCurrentSale((sale) => ({ ...sale, idempotency_key: key }));
+    }
+    return key;
   };
 
   const formatPrice = (price: any): string => {
@@ -404,8 +423,10 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
     }
 
     try {
+      const idempotencyKey = ensureIdempotencyKey();
       const saleData = {
         ...currentSale,
+        idempotency_key: idempotencyKey,
         status: 'draft',
         amount_paid: currentSale.payment_type === 'cash' ? amountPaid : 0,
         change_amount: currentSale.payment_type === 'cash' ? Math.max(0, amountPaid - currentSale.net_amount) : 0,
@@ -417,14 +438,14 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
         body: JSON.stringify(saleData),
       });
 
-      if (!response.ok) throw new Error('Failed to save draft');
+      if (!response.ok) throw new Error(await getApiError(response, 'ไม่สามารถบันทึก Draft ได้'));
       
       showSnackbar('บันทึก Draft สำเร็จ', 'success');
       resetForm();
       fetchSales();
       onSalesChange();
     } catch (error) {
-      showSnackbar('ไม่สามารถบันทึก Draft ได้', 'error');
+      showSnackbar(error instanceof Error ? error.message : 'ไม่สามารถบันทึก Draft ได้', 'error');
     }
   };
 
@@ -461,8 +482,10 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
     }
 
     try {
+      const idempotencyKey = ensureIdempotencyKey();
       const saleData = {
         ...currentSale,
+        idempotency_key: idempotencyKey,
         status: 'completed',
         amount_paid: currentSale.payment_type === 'cash' ? amountPaid : 0,
         change_amount: currentSale.payment_type === 'cash' ? Math.max(0, amountPaid - currentSale.net_amount) : 0,
@@ -474,7 +497,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
         body: JSON.stringify(saleData),
       });
 
-      if (!response.ok) throw new Error('Failed to complete sale');
+      if (!response.ok) throw new Error(await getApiError(response, 'ไม่สามารถบันทึกการขายได้'));
       
       const savedSale = await response.json();
       setCompletedSale(savedSale);
@@ -484,7 +507,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
       fetchSales();
       onSalesChange();
     } catch (error) {
-      showSnackbar('ไม่สามารถบันทึกการขายได้', 'error');
+      showSnackbar(error instanceof Error ? error.message : 'ไม่สามารถบันทึกการขายได้', 'error');
     }
   };
 
@@ -551,6 +574,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
   };
 
   const resetForm = () => {
+    idempotencyKeyRef.current = null;
     setCurrentSale({
       sale_date: new Date().toISOString().split('T')[0],
       customer_id: null,
@@ -572,6 +596,7 @@ export default function ManageSales({ onSalesChange }: ManageSalesProps) {
   };
 
   const loadDraft = (sale: Sale) => {
+    idempotencyKeyRef.current = sale.idempotency_key || null;
     setCurrentSale(sale);
     setAmountPaid(sale.amount_paid || 0); // Load amount paid from draft
     setDraftsDialog(false);
